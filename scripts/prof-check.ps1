@@ -1,46 +1,85 @@
 ﻿param(
   [switch]$KeepApi,
+  [switch]$Clean,
+  [int]$TimeoutSec = 120,
   [string]$Tag="(working-copy)"
 )
 $ErrorActionPreference = "Stop"
 Write-Host "== PROF CHECK =="
 
-# (a) puerto para DB
-$port = 3306
-if (Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue) { $port = 3307 }
-if (Test-Path .\.env) {
-  (Get-Content .\.env) -replace '^DB_PORT=.*$', "DB_PORT=$port" | Set-Content .\.env
-} else {
-  Copy-Item .\.env.example .\.env -Force
-  (Get-Content .\.env) -replace '^DB_PORT=.*$', "DB_PORT=$port" | Set-Content .\.env
+# A) Docker Desktop listo
+try { docker info | Out-Null } catch {
+  $dockerExe = "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+  if (Test-Path $dockerExe) {
+    Write-Host "-> Docker Desktop no estaba corriendo. Iniciando..."
+    Start-Process $dockerExe | Out-Null
+    $ok=$false; for($i=0;$i -lt $TimeoutSec/2;$i++){ try { docker info | Out-Null; $ok=$true; break } catch { Start-Sleep 2 } }
+    if(-not $ok){ throw "Docker Desktop no arrancó a tiempo. Abrilo y reintentá." }
+  } else {
+    throw "Docker Desktop no está disponible en este equipo."
+  }
 }
-Write-Host "DB_PORT=$port"
 
-# (b) docker up
+# B) Limpieza opcional
+if ($Clean -and (Test-Path .\docker-compose.yml)) {
+  Write-Host "-> Limpiando contenedores/volúmenes previos..."
+  docker compose down --volumes --remove-orphans
+}
+
+# C) Levantar servicios
 docker compose up -d
-docker compose ps | Write-Host
-docker compose logs -f db | Select-Object -First 10 | Out-Null
 
-# (c) venv + deps
+# Esperar a que db esté healthy
+$deadline = (Get-Date).AddSeconds($TimeoutSec)
+do {
+  $dbId = (docker compose ps -q db).Trim()
+  if (-not $dbId) { Start-Sleep 1; continue }
+  $status = (docker inspect -f "{{.State.Health.Status}}" $dbId) 2>$null
+  if ($status -eq "healthy") { break }
+  Start-Sleep 1
+} while ((Get-Date) -lt $deadline)
+if ($status -ne "healthy") { throw "MySQL no llegó a healthy a tiempo." }
+
+# D) Descubrir puerto host real y alinear .env
+$hostPort = (docker compose port db 3306) -replace '.*:',''
+if (-not $hostPort) { throw "No pude obtener el puerto host de MySQL." }
+Write-Host "DB_PORT(host) -> $hostPort"
+
+$envPath = ".\.env"
+if (!(Test-Path $envPath)) { Copy-Item .\.env.example $envPath -Force }
+$envText = Get-Content $envPath -Raw
+function UpsertEnv([string]$k,[string]$v) {
+  $pattern = "(?m)^$([regex]::Escape($k))=.*$"
+  if ($envText -match $pattern) { $script:envText = $envText -replace $pattern, "$k=$v" }
+  else { $script:envText += "`r`n$k=$v" }
+}
+UpsertEnv "DB_HOST" "127.0.0.1"
+UpsertEnv "DB_PORT" "$hostPort"
+UpsertEnv "DB_USER" "root"
+UpsertEnv "DB_PASSWORD" "root"
+UpsertEnv "DB_NAME" "salas_db"
+Set-Content -Encoding utf8 $envPath $envText
+
+# E) Venv + deps
 if (!(Test-Path .\.venv\Scripts\python.exe)) { py -m venv .venv }
 $py = Join-Path (Resolve-Path .\.venv\Scripts) 'python.exe'
 & $py -m pip install --upgrade pip
 & $py -m pip install -r requirements.txt
 
-# (d) levantar API (otra consola PowerShell) usando run.ps1 que carga .env
+# F) Levantar API en otra consola (carga .env desde run.ps1)
 $api = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-Command",". .\.venv\Scripts\Activate.ps1; .\scripts\run.ps1" -PassThru
 Start-Sleep -Seconds 2
 
-# (e) esperar /health
+# G) Esperar /health
 $ok=$false
-for($i=0;$i -lt 30;$i++){
+for($i=0;$i -lt 60;$i++){
   try{ $h=irm "http://127.0.0.1:8000/health"; if($h.status -eq "ok"){ $ok=$true; break } }catch{ Start-Sleep -Milliseconds 500 }
 }
-if(-not $ok){ throw "API no respondió /health" }
+if(-not $ok){ throw "API no respondió /health." }
 
 function Assert($cond,$msg){ if(-not $cond){ throw "FAIL: $msg" } else { Write-Host "PASS:" $msg } }
 
-# (f) smoke CRUD turnos
+# H) Smoke CRUD turnos
 $t = irm "http://127.0.0.1:8000/turnos"
 Assert ($t.Count -ge 15) "GET /turnos >= 15"
 
@@ -68,9 +107,8 @@ Assert $gone "DELETE /turnos/99 -> 404"
 Write-Host "`nSmoke OK ✅  Tag: $Tag"
 
 if(-not $KeepApi){
-  # apagar API para no dejar procesos colgados
   Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match 'uvicorn' } | Stop-Process -Force
   Write-Host "API detenida. Adminer sigue en http://localhost:8080"
-}else{
+} else {
   Write-Host "API se mantiene en http://127.0.0.1:8000/docs (flag -KeepApi)"
 }

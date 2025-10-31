@@ -1,14 +1,5 @@
-﻿param([string]$EnvFile = ".env")
-
-# Cargar variables desde .env si existe
-if (Test-Path $EnvFile) {
-  Get-Content $EnvFile | ForEach-Object {
-    if ($_ -match "^\s*#") { return }
-    if ($_ -match "^\s*$") { return }
-    $k, $v = $_.Split("=",2)
-    [System.Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim())
-  }
-}
-
-# Levantar FastAPI
-python -m uvicorn src.app:app --reload --host 0.0.0.0 --port 8000
+﻿param([int]$Port=8000)
+$ErrorActionPreference = "Stop"
+# venv ya activado por el caller; aseguramos .env
+if (!(Test-Path ".\.env") -and (Test-Path ".\.env.example")) { Copy-Item ".\.env.example" ".\.env" -Force }
+python -m uvicorn src.app:app --host 127.0.0.1 --port $Port --env-file .env
