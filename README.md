@@ -51,3 +51,10 @@ Copy-Item .env.example .env -Force
 # El script verifica/arranca Docker Desktop, alinea .env y corre smoke.
 powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
 # Swagger: http://127.0.0.1:8000/docs  · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)
+
+### 🧪 Prueba rápida (modo profesor)
+El script arranca **Docker Desktop** si está apagado, selecciona automáticamente **DB_PORT** libre (3306→3307→3308), alinea `.env` y corre un smoke.
+```powershell
+Copy-Item .env.example .env -Force
+powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
+# Swagger: http://127.0.0.1:8000/docs · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)
