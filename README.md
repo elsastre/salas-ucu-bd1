@@ -26,3 +26,11 @@ pwsh .\scripts\run.ps1
 - Levantar servicios:
   ```powershell
   docker compose up -d
+
+## ✅ Prueba rápida (modo profesor)
+```powershell
+# en Windows PowerShell
+git clone https://github.com/<tu-usuario>/salas-ucu-bd1
+cd salas-ucu-bd1
+Copy-Item .env.example .env
+powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1
