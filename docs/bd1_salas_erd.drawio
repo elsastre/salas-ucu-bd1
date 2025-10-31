@@ -1,0 +1,73 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.2.15 Chrome/134.0.6998.205 Electron/35.2.1 Safari/537.36" compressed="false" version="26.2.15">
+  <diagram id="bd1-salas-erd" name="BD1 Salas ERD">
+    <mxGraphModel dx="1959" dy="999" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="facultad" value="FACULTAD — id_facultad (PK) — nombre" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="20" y="20" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="programa" value="PROGRAMA_ACADEMICO — nombre_programa (PK) — id_facultad (FK) — tipo {grado|posgrado}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="350" y="20" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="participante" value="PARTICIPANTE — ci (PK) — nombre — apellido — email (UNIQUE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="990" y="20" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="pprog" value="PARTICIPANTE_PROGRAMA — id_alumno_programa (PK) — ci_participante (FK) — nombre_programa (FK) — rol {alumno|docente}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="670" y="20" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="edificio" value="EDIFICIO — nombre_edificio (PK) — direccion — departamento" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="1250" y="480" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="sala" value="SALA — nombre_sala (PK1) — edificio (PK2, FK) — capacidad — tipo_sala {libre|posgrado|docente}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="1570" y="480" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="turno" value="TURNO — id_turno (PK) — hora_inicio — hora_fin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="1880" y="480" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="reserva" value="RESERVA — id_reserva (PK) — nombre_sala (FK) — edificio (FK) — fecha — id_turno (FK) — estado {activa|cancelada|sin_asistencia|finalizada} UNIQUE(nombre_sala, edificio, fecha, id_turno)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="1850" width="320" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="rpart" value="RESERVA_PARTICIPANTE — ci_participante (PK1, FK) — id_reserva (PK2, FK) — fecha_solicitud_reserva — asistencia (BOOL)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="1420" y="10" width="320" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="sancion" value="SANCION_PARTICIPANTE — ci_participante (PK1, FK) — fecha_inicio (PK2) — fecha_fin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="960" y="320" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="login" value="LOGIN — correo (PK) — contrasena" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="660" y="320" width="260" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="e_prog_fac" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="programa" target="facultad" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pprog_part" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="pprog" target="participante" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pprog_prog" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="pprog" target="programa" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sala_edif" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="sala" target="edificio" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_res_sala" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="reserva" target="sala" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_res_turno" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="reserva" target="turno" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rp_res" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="rpart" target="reserva" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rp_part" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="rpart" target="participante" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sanc_part" value="N:1" style="endArrow=block;html=1;rounded=0;" parent="1" source="sancion" target="participante" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_login_part" value="correo = email (opcional)" style="endArrow=block;html=1;rounded=0;dashed=1;" parent="1" source="login" target="participante" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

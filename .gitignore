@@ -13,3 +13,7 @@ Thumbs.db
 
 # Docker MySQL volume.mysql/
 
+rn# Docker MySQL volumer.mysql/rn
+
+/.mysql/
+

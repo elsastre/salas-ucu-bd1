@@ -21,3 +21,8 @@ Copy-Item .env.example .env
 # 5) Levantar API
 pwsh .\scripts\run.ps1
 # -> http://127.0.0.1:8000/health y /turnos
+
+## Docker (rápido)
+- Levantar servicios:
+  ```powershell
+  docker compose up -d
