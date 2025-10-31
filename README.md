@@ -34,3 +34,11 @@ git clone https://github.com/<tu-usuario>/salas-ucu-bd1
 cd salas-ucu-bd1
 Copy-Item .env.example .env
 powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1
+
+## ✅ Prueba rápida (modo profesor)
+```powershell
+git clone https://github.com/<tu-usuario>/salas-ucu-bd1
+cd salas-ucu-bd1
+Copy-Item .env.example .env -Force
+powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
+# Swagger: http://127.0.0.1:8000/docs  · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)

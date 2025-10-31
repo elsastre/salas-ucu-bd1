@@ -1,13 +1,13 @@
-﻿param([string]$Tag="(working-copy)")
+﻿param(
+  [switch]$KeepApi,
+  [string]$Tag="(working-copy)"
+)
 $ErrorActionPreference = "Stop"
-
 Write-Host "== PROF CHECK =="
 
-# (a) Seleccionar puerto si 3306 ocupado
+# (a) puerto para DB
 $port = 3306
-if (Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue) {
-  $port = 3307
-}
+if (Get-NetTCPConnection -LocalPort 3306 -ErrorAction SilentlyContinue) { $port = 3307 }
 if (Test-Path .\.env) {
   (Get-Content .\.env) -replace '^DB_PORT=.*$', "DB_PORT=$port" | Set-Content .\.env
 } else {
@@ -16,25 +16,25 @@ if (Test-Path .\.env) {
 }
 Write-Host "DB_PORT=$port"
 
-# (b) Levantar Docker
+# (b) docker up
 docker compose up -d
 docker compose ps | Write-Host
 docker compose logs -f db | Select-Object -First 10 | Out-Null
 
 # (c) venv + deps
-if (!(Test-Path .\.venv\Scripts\Activate.ps1)) { py -m venv .venv }
-. .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+if (!(Test-Path .\.venv\Scripts\python.exe)) { py -m venv .venv }
+$py = Join-Path (Resolve-Path .\.venv\Scripts) 'python.exe'
+& $py -m pip install --upgrade pip
+& $py -m pip install -r requirements.txt
 
-# (d) levantar API usando run.ps1 (carga .env)
-$api = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoLogo","-NoProfile","-ExecutionPolicy","Bypass","-Command",". .\.venv\Scripts\Activate.ps1; .\scripts\run.ps1" -PassThru
+# (d) levantar API (otra consola PowerShell) usando run.ps1 que carga .env
+$api = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-Command",". .\.venv\Scripts\Activate.ps1; .\scripts\run.ps1" -PassThru
 Start-Sleep -Seconds 2
 
 # (e) esperar /health
 $ok=$false
 for($i=0;$i -lt 30;$i++){
-  try{$h=irm "http://127.0.0.1:8000/health"; if($h.status -eq "ok"){ $ok=$true; break }}catch{Start-Sleep -Milliseconds 500}
+  try{ $h=irm "http://127.0.0.1:8000/health"; if($h.status -eq "ok"){ $ok=$true; break } }catch{ Start-Sleep -Milliseconds 500 }
 }
 if(-not $ok){ throw "API no respondió /health" }
 
@@ -65,4 +65,12 @@ irm "http://127.0.0.1:8000/turnos/99" -Method DELETE | Out-Null
 $gone=$false; try{ irm "http://127.0.0.1:8000/turnos/99" | Out-Null }catch{ if($_.Exception.Response.StatusCode.value__ -eq 404){$gone=$true}}
 Assert $gone "DELETE /turnos/99 -> 404"
 
-Write-Host "`nSmoke OK ✅  Tag:" $Tag
+Write-Host "`nSmoke OK ✅  Tag: $Tag"
+
+if(-not $KeepApi){
+  # apagar API para no dejar procesos colgados
+  Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match 'uvicorn' } | Stop-Process -Force
+  Write-Host "API detenida. Adminer sigue en http://localhost:8080"
+}else{
+  Write-Host "API se mantiene en http://127.0.0.1:8000/docs (flag -KeepApi)"
+}
