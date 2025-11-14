@@ -1,0 +1,19 @@
+﻿# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Node (si se agrega front)
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker MySQL volume.mysql/
+
+rn# Docker MySQL volumer.mysql/rn
+
+/.mysql/
+
