@@ -23,22 +23,22 @@
             </div>
         </header>
 
-        <section id="login-card" class="card card-standalone">
+        <section id="loginCard" class="card card-standalone">
             <div class="card-header">
                 <div>
                     <h2>Ingreso al panel</h2>
                     <p class="muted">Identifícate con tu CI para habilitar el dashboard. No se requieren contraseñas.</p>
                 </div>
             </div>
-            <form id="login-form" class="form-grid tight">
+            <form id="frmLogin" class="form-grid tight">
                 <label>CI
-                    <input type="text" id="login-ci" placeholder="Ej: 59.876.543" required />
+                    <input type="text" id="ciLogin" placeholder="Ej: 59.876.543" required />
                     <span class="help">Formato sugerido: 7 u 8 dígitos, con o sin puntos.</span>
                 </label>
                 <div class="form-actions">
-                    <button class="btn" type="submit">Entrar</button>
+                    <button class="btn" id="loginSubmit" type="submit">Entrar</button>
                 </div>
-                <div class="alert" id="login-msg"></div>
+                <div class="alert" id="loginMessage"></div>
             </form>
             <p class="help">Debes iniciar sesión para usar reservas, reportes y ABMs. El rol admin habilita las acciones maestras.</p>
         </section>
@@ -53,6 +53,7 @@
             </div>
         </div>
 
+        <div id="mainTabs">
         <div id="app-shell">
         <div class="tabs-shell">
             <nav class="tabs" aria-label="Secciones de la aplicación">
@@ -653,6 +654,7 @@
         </section>
     </main>
 
+    </div>
     </div>
 
     <div id="toast-container" aria-live="polite"></div>
