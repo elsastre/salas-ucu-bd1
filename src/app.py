@@ -108,6 +108,9 @@ def normalize_ci_list(cis: List[str]) -> List[str]:
     return [normalize_ci(ci) for ci in cis or []]
 
 
+ESTADOS_OCUPAN_DIA = ("activa", "sin_asistencia", "finalizada")
+
+
 def _time_to_str(v: time | timedelta | str | None) -> str:
     if isinstance(v, timedelta):
         total = int(v.total_seconds())
@@ -762,6 +765,49 @@ def create_reserva(payload: ReservaIn):
     try:
         cur = conn.cursor(dictionary=True)
 
+        def horas_reservadas_libre(ci: str) -> float:
+            placeholders_estados = ",".join(["%s"] * len(ESTADOS_OCUPAN_DIA))
+            cur.execute(
+                f"""
+                SELECT COALESCE(SUM(TIME_TO_SEC(t.hora_fin) - TIME_TO_SEC(t.hora_inicio)) / 3600, 0) AS horas
+                FROM reserva r
+                JOIN reserva_participante rp
+                  ON rp.id_reserva = r.id_reserva
+                JOIN sala s
+                  ON s.nombre_sala = r.nombre_sala
+                 AND s.edificio = r.edificio
+                JOIN turno t
+                  ON t.id_turno = r.id_turno
+                WHERE rp.ci_participante = %s
+                  AND r.fecha = %s
+                  AND r.estado IN ({placeholders_estados})
+                  AND s.tipo_sala = 'libre'
+                """,
+                (ci, payload.fecha, *ESTADOS_OCUPAN_DIA),
+            )
+            row = cur.fetchone()
+            return float(row["horas"]) if row else 0.0
+
+        def reservas_semana_libre(ci: str) -> int:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cant
+                FROM reserva r
+                JOIN reserva_participante rp
+                  ON rp.id_reserva = r.id_reserva
+                JOIN sala s
+                  ON s.nombre_sala = r.nombre_sala
+                 AND s.edificio = r.edificio
+                WHERE rp.ci_participante = %s
+                  AND r.estado = 'activa'
+                  AND s.tipo_sala = 'libre'
+                  AND YEARWEEK(r.fecha, 3) = YEARWEEK(%s, 3)
+                """,
+                (ci, payload.fecha),
+            )
+            row = cur.fetchone()
+            return int(row["cant"] or 0)
+
         # 1) Validar sala y obtener capacidad + tipo_sala
         cur.execute(
             """
@@ -796,7 +842,12 @@ def create_reserva(payload: ReservaIn):
             )
 
         # 4) Lista de participantes
-        participantes = payload.participantes or []
+        participantes = normalize_ci_list(payload.participantes)
+        if not participantes:
+            raise HTTPException(
+                status_code=400,
+                detail="Debe indicar al menos un participante para la reserva.",
+            )
 
         # 5) Validar existencia de participantes
         placeholders = ",".join(["%s"] * len(participantes))
@@ -860,68 +911,24 @@ def create_reserva(payload: ReservaIn):
                 )
 
             for ci in participantes:
-                # 7.a) Determinar si aplican límites 2h/día y 3 reservas/semana
-                tipo_participante = participantes_info[ci]["tipo_participante"]
-                aplicar_limites = False
+                # 7.a) Límite diario/semanal solo para salas de uso libre
                 if tipo_sala == "libre":
-                    aplicar_limites = True
-                elif tipo_sala == "docente":
-                    aplicar_limites = tipo_participante != "docente"
-                elif tipo_sala == "posgrado":
-                    aplicar_limites = tipo_participante == "estudiante"
-
-                if aplicar_limites:
-                    # 2 horas diarias en salas de uso libre (contamos turnos activos)
-                    cur.execute(
-                        """
-                        SELECT COUNT(*) AS cant
-                        FROM reserva r
-                        JOIN reserva_participante rp
-                          ON rp.id_reserva = r.id_reserva
-                        JOIN sala s
-                          ON s.nombre_sala = r.nombre_sala
-                         AND s.edificio = r.edificio
-                        WHERE rp.ci_participante = %s
-                          AND r.fecha = %s
-                          AND r.estado = 'activa'
-                          AND s.tipo_sala = 'libre'
-                        """,
-                        (ci, payload.fecha),
-                    )
-                    cant_dia = cur.fetchone()["cant"] or 0
-                    if cant_dia >= 2:
+                    horas_dia = horas_reservadas_libre(ci)
+                    if horas_dia >= 2:
                         raise HTTPException(
                             status_code=409,
                             detail=(
-                                f"El participante {ci} ya tiene {cant_dia} horas reservadas "
+                                f"El participante {ci} ya tiene {horas_dia:.0f} horas reservadas "
                                 "en salas de uso libre para ese día."
                             ),
                         )
 
-                    # 3 reservas activas por semana en salas de uso libre
-                    cur.execute(
-                        """
-                        SELECT COUNT(*) AS cant
-                        FROM reserva r
-                        JOIN reserva_participante rp
-                          ON rp.id_reserva = r.id_reserva
-                        JOIN sala s
-                          ON s.nombre_sala = r.nombre_sala
-                         AND s.edificio = r.edificio
-                        WHERE rp.ci_participante = %s
-                          AND r.estado = 'activa'
-                          AND s.tipo_sala = 'libre'
-                          AND YEARWEEK(r.fecha, 3) = YEARWEEK(%s, 3)
-                        """,
-                        (ci, payload.fecha),
-                    )
-                    cant_semana = cur.fetchone()["cant"] or 0
+                    cant_semana = reservas_semana_libre(ci)
                     if cant_semana >= 3:
                         raise HTTPException(
                             status_code=409,
                             detail=(
-                                f"El participante {ci} ya tiene {cant_semana} reservas activas "
-                                "de salas de uso libre en esa semana."
+                                "4ª reserva semanal: límite de 3 reservas activas por semana excedido."
                             ),
                         )
 
@@ -1089,7 +1096,7 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
 
         participantes_reserva = {row["ci_participante"] for row in filas_part}
 
-        presentes = set(payload.presentes or [])
+        presentes = set(normalize_ci_list(payload.presentes))
         desconocidos = [ci for ci in presentes if ci not in participantes_reserva]
         if desconocidos:
             raise HTTPException(
@@ -1423,6 +1430,29 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
     conn = get_conn()
     try:
         cur = conn.cursor()
+
+        bloqueos = []
+        cur.execute("SELECT COUNT(*) FROM reserva_participante WHERE ci_participante = %s", (ci,))
+        if (cur.fetchone() or [0])[0]:
+            bloqueos.append("tiene reservas asociadas")
+
+        cur.execute("SELECT COUNT(*) FROM sancion_participante WHERE ci_participante = %s", (ci,))
+        if (cur.fetchone() or [0])[0]:
+            bloqueos.append("tiene sanciones asociadas")
+
+        cur.execute(
+            "SELECT COUNT(*) FROM participante_programa_academico WHERE ci_participante = %s",
+            (ci,),
+        )
+        if (cur.fetchone() or [0])[0]:
+            bloqueos.append("está vinculado a programas académicos")
+
+        if bloqueos:
+            raise HTTPException(
+                status_code=409,
+                detail=f"No se puede eliminar el participante porque {', '.join(bloqueos)}",
+            )
+
         cur.execute(
             "DELETE FROM participante WHERE ci = %s",
             (ci,),
@@ -1434,12 +1464,6 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
 
         return {"detail": "Participante eliminado"}
     except mysql.connector.Error as e:
-        # 1451 = Cannot delete or update a parent row: a foreign key constraint fails
-        if e.errno == 1451:
-            raise HTTPException(
-                status_code=409,
-                detail="No se puede eliminar el participante porque tiene reservas, programas o sanciones asociadas",
-            )
         raise HTTPException(
             status_code=500,
             detail=f"Error eliminando participante: {e}",
