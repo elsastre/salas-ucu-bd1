@@ -67,6 +67,23 @@ def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
                 NOT NULL DEFAULT 'estudiante'
                 """
             )
+
+        # Normalizar CIs existentes (seeds viejos podían tener puntos/guiones).
+        cur.execute("SET FOREIGN_KEY_CHECKS=0")
+        for table, column in [
+            ("participante", "ci"),
+            ("participante_programa_academico", "ci_participante"),
+            ("reserva_participante", "ci_participante"),
+            ("sancion_participante", "ci_participante"),
+        ]:
+            cur.execute(
+                f"""
+                UPDATE {table}
+                SET {column} = REGEXP_REPLACE({column}, '[^0-9]', '')
+                WHERE {column} REGEXP '[^0-9]'
+                """
+            )
+        cur.execute("SET FOREIGN_KEY_CHECKS=1")
         _MIGRATIONS_APPLIED = True
     except mysql.connector.Error as e:
         raise HTTPException(
@@ -794,6 +811,22 @@ def create_reserva(payload: ReservaIn):
                 status_code=404,
                 detail=f"Participantes no encontrados: {', '.join(faltantes)}",
             )
+
+        # 5.b) Validar exclusividad por tipo de sala
+        if tipo_sala in {"posgrado", "docente"}:
+            no_aptos = [
+                ci
+                for ci, info in participantes_info.items()
+                if info["tipo_participante"] != tipo_sala
+            ]
+            if no_aptos:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"La sala {payload.nombre_sala} en {payload.edificio} es exclusiva para {tipo_sala}. "
+                        f"CIs no aptas: {', '.join(no_aptos)}."
+                    ),
+                )
 
         # 6) Validar capacidad de la sala
         if len(participantes) > capacidad:
