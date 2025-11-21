@@ -12,9 +12,9 @@ INSERT IGNORE INTO programa_academico (nombre_programa, id_facultad, tipo) VALUE
   ('Ing. en IA y Datos', 1, 'grado'),
   ('MBA', 2, 'posgrado');
 
-INSERT IGNORE INTO participante (ci, nombre, apellido, email) VALUES
-  ('4.123.456-7', 'Matihas', 'Sastre', 'matihas.sastre@ucu.edu.uy'),
-  ('5.987.654-3', 'Ada', 'Lovelace', 'ada@ucu.edu.uy');
+INSERT IGNORE INTO participante (ci, nombre, apellido, email, tipo_participante) VALUES
+  ('4.123.456-7', 'Matihas', 'Sastre', 'matihas.sastre@ucu.edu.uy', 'estudiante'),
+  ('5.987.654-3', 'Ada', 'Lovelace', 'ada@ucu.edu.uy', 'docente');
 
 INSERT IGNORE INTO participante_programa_academico (ci_participante, nombre_programa, rol) VALUES
   ('4.123.456-7', 'Ing. en IA y Datos', 'alumno'),

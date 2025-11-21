@@ -23,10 +23,11 @@ CREATE TABLE programa_academico (
 );
 
 CREATE TABLE participante (
-  ci       VARCHAR(20) PRIMARY KEY,
-  nombre   VARCHAR(80) NOT NULL,
-  apellido VARCHAR(80) NOT NULL,
-  email    VARCHAR(120) NOT NULL UNIQUE
+  ci                VARCHAR(20) PRIMARY KEY,
+  nombre            VARCHAR(80) NOT NULL,
+  apellido          VARCHAR(80) NOT NULL,
+  email             VARCHAR(120) NOT NULL UNIQUE,
+  tipo_participante ENUM('estudiante','docente','posgrado') NOT NULL DEFAULT 'estudiante'
 );
 
 CREATE TABLE participante_programa_academico (
