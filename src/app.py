@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from typing import List, Literal, Any
-import os, mysql.connector
+import os, mysql.connector, re
 from datetime import timedelta, date
 from pathlib import Path as FilePath
 
@@ -15,7 +15,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # --------- DB ---------
 def get_conn():
-    return mysql.connector.connect(
+    conn = mysql.connector.connect(
         host=os.getenv("DB_HOST", "127.0.0.1"),
         port=int(os.getenv("DB_PORT", "3306")),
         user=os.getenv("DB_USER", "root"),
@@ -23,6 +23,8 @@ def get_conn():
         database=os.getenv("DB_NAME", "salas_db"),
         autocommit=True
     )
+    ensure_schema_migrations(conn)
+    return conn
 
 # Para compatibilidad con el código existente
 def get_reservas_connection():
@@ -30,6 +32,61 @@ def get_reservas_connection():
 
 # --------- helpers ---------
 from datetime import time, timedelta
+
+CI_CLEAN_RE = re.compile(r"\D")
+
+
+_MIGRATIONS_APPLIED = False
+
+
+def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
+    """
+    Aplica migraciones ligeras para entornos ya inicializados con un schema
+    anterior (por ejemplo, bases levantadas antes de agregar el campo
+    tipo_participante).
+
+    Esto evita errores 500 de "Unknown column 'tipo_participante'" cuando el
+    volumen de datos persiste entre levantadas de Docker.
+    """
+    global _MIGRATIONS_APPLIED
+    if _MIGRATIONS_APPLIED:
+        return
+
+    cur = conn.cursor()
+    try:
+        cur.execute("SHOW COLUMNS FROM participante LIKE 'tipo_participante'")
+        if cur.fetchone() is None:
+            cur.execute(
+                """
+                ALTER TABLE participante
+                ADD COLUMN IF NOT EXISTS tipo_participante
+                ENUM('estudiante','docente','posgrado')
+                NOT NULL DEFAULT 'estudiante'
+                """
+            )
+        _MIGRATIONS_APPLIED = True
+    except mysql.connector.Error as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error aplicando migraciones: {e}",
+        )
+    finally:
+        cur.close()
+
+
+def normalize_ci(ci: str) -> str:
+    if ci is None:
+        raise HTTPException(status_code=422, detail="Formato de CI inválido")
+    raw = ci.strip()
+    digits = CI_CLEAN_RE.sub("", raw)
+    if 7 <= len(digits) <= 8 and digits.isdigit():
+        return digits
+    raise HTTPException(status_code=422, detail="Formato de CI inválido")
+
+
+def normalize_ci_list(cis: List[str]) -> List[str]:
+    return [normalize_ci(ci) for ci in cis or []]
+
 
 def _time_to_str(v: time | timedelta | str | None) -> str:
     if isinstance(v, timedelta):
@@ -116,7 +173,8 @@ class SalaCreate(SalaBase):
     pass
 
 class SalaUpdate(BaseModel):
-    """Actualizar solo los atributos editables de una sala (no PK)."""
+    """Actualizar los atributos editables de una sala (permite renombrar)."""
+    nombre_sala: str
     capacidad: int
     tipo_sala: Literal["libre", "posgrado", "docente"]
 
@@ -126,6 +184,29 @@ class ParticipanteBase(BaseModel):
     nombre: str
     apellido: str
     email: str
+    tipo_participante: Literal["estudiante", "docente", "posgrado"]
+
+    @field_validator("ci")
+    @classmethod
+    def _val_ci(cls, v):
+        return normalize_ci(v)
+
+    @staticmethod
+    def _val_nombre_apellido(v: str) -> str:
+        clean = (v or "").strip()
+        if len(clean) < 2 or not re.search(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]", clean):
+            raise ValueError("Debe tener al menos 2 caracteres alfabéticos")
+        return clean
+
+    @field_validator("nombre")
+    @classmethod
+    def _val_nombre(cls, v):
+        return ParticipanteBase._val_nombre_apellido(v)
+
+    @field_validator("apellido")
+    @classmethod
+    def _val_apellido(cls, v):
+        return ParticipanteBase._val_nombre_apellido(v)
 
 class ParticipanteCreate(ParticipanteBase):
     """Modelo para alta de participante (tiene todos los campos)."""
@@ -136,6 +217,17 @@ class ParticipanteUpdate(BaseModel):
     nombre: str
     apellido: str
     email: str
+    tipo_participante: Literal["estudiante", "docente", "posgrado"]
+
+    @field_validator("nombre")
+    @classmethod
+    def _val_nombre(cls, v):
+        return ParticipanteBase._val_nombre_apellido(v)
+
+    @field_validator("apellido")
+    @classmethod
+    def _val_apellido(cls, v):
+        return ParticipanteBase._val_nombre_apellido(v)
 
 # --------- MODELOS REPORTES ---------
 class ReportSalaUso(BaseModel):
@@ -161,6 +253,11 @@ class SancionBase(BaseModel):
     ci_participante: str
     fecha_inicio: date
     fecha_fin: date
+
+    @field_validator("ci_participante")
+    @classmethod
+    def _val_ci(cls, v):
+        return normalize_ci(v)
 
     @field_validator("fecha_fin")
     @classmethod
@@ -507,8 +604,8 @@ def actualizar_sala(
     s: SalaUpdate = ...,
 ):
     """
-    Actualiza capacidad y tipo_sala de una sala existente.
-    No permite cambiar el nombre ni el edificio (PK).
+    Actualiza una sala existente. El identificador surge de la URL
+    (edificio, nombre_sala) y el payload puede incluir un nombre nuevo.
     """
     conn = get_conn()
     try:
@@ -531,21 +628,27 @@ def actualizar_sala(
         cur.execute(
             """
             UPDATE sala
-            SET capacidad = %s,
+            SET nombre_sala = %s,
+                capacidad = %s,
                 tipo_sala = %s
             WHERE edificio = %s AND nombre_sala = %s
             """,
-            (s.capacidad, s.tipo_sala, edificio, nombre_sala),
+            (s.nombre_sala, s.capacidad, s.tipo_sala, edificio, nombre_sala),
         )
         conn.commit()
 
         return {
-            "nombre_sala": nombre_sala,
+            "nombre_sala": s.nombre_sala,
             "edificio": edificio,
             "capacidad": s.capacidad,
             "tipo_sala": s.tipo_sala,
         }
     except mysql.connector.Error as e:
+        if e.errno == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe una sala con ese nombre en ese edificio",
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Error actualizando sala: {e}",
@@ -605,9 +708,23 @@ class ReservaIn(BaseModel):
     participantes: List[str]          # CIs de los participantes
     estado: str | None = None         # opcional, default "activa"
 
+    @field_validator("participantes")
+    @classmethod
+    def _val_cis(cls, v):
+        norm = normalize_ci_list(v)
+        if not norm:
+            raise ValueError("Debe indicar al menos un participante")
+        return norm
+
 
 class AsistenciaIn(BaseModel):
-    presentes: List[str]              # CIs que efectivamente asistieron
+    presentes: List[str] = []              # CIs que efectivamente asistieron
+    sancionar_ausentes: bool = True
+
+    @field_validator("presentes")
+    @classmethod
+    def _val_presentes(cls, v):
+        return normalize_ci_list(v)
 
 @app.post("/reservas", response_model=ReservaOut, status_code=201)
 def create_reserva(payload: ReservaIn):
@@ -660,20 +777,15 @@ def create_reserva(payload: ReservaIn):
 
         # 4) Lista de participantes
         participantes = payload.participantes or []
-        if not participantes:
-            raise HTTPException(
-                status_code=422,
-                detail="Debe indicar al menos un participante para la reserva.",
-            )
 
         # 5) Validar existencia de participantes
         placeholders = ",".join(["%s"] * len(participantes))
         cur.execute(
-            f"SELECT ci FROM participante WHERE ci IN ({placeholders})",
+            f"SELECT ci, tipo_participante FROM participante WHERE ci IN ({placeholders})",
             tuple(participantes),
         )
-        encontrados = {row["ci"] for row in cur.fetchall()}
-        faltantes = [ci for ci in participantes if ci not in encontrados]
+        participantes_info = {row["ci"]: row for row in cur.fetchall()}
+        faltantes = [ci for ci in participantes if ci not in participantes_info]
         if faltantes:
             raise HTTPException(
                 status_code=404,
@@ -690,52 +802,37 @@ def create_reserva(payload: ReservaIn):
 
         # 7) Reglas de negocio por persona (solo si la reserva será ACTIVA)
         if estado == "activa":
-            for ci in participantes:
-                # 7.a) Verificar sanción vigente
-                cur.execute(
-                    """
-                    SELECT fecha_inicio, fecha_fin
-                    FROM sancion_participante
-                    WHERE ci_participante = %s
-                      AND %s BETWEEN fecha_inicio AND fecha_fin
-                    LIMIT 1
-                    """,
-                    (ci, payload.fecha),
+            placeholders = ",".join(["%s"] * len(participantes))
+            cur.execute(
+                f"""
+                SELECT ci_participante, fecha_inicio, fecha_fin
+                FROM sancion_participante
+                WHERE ci_participante IN ({placeholders})
+                  AND %s BETWEEN fecha_inicio AND fecha_fin
+                """,
+                (*participantes, payload.fecha),
+            )
+            sancionados = cur.fetchall()
+            if sancionados:
+                detalles = ", ".join(
+                    f"{row['ci_participante']} ({row['fecha_inicio']} a {row['fecha_fin']})"
+                    for row in sancionados
                 )
-                sancion = cur.fetchone()
-                if sancion:
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            f"El participante {ci} está sancionado entre "
-                            f"{sancion['fecha_inicio']} y {sancion['fecha_fin']}."
-                        ),
-                    )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Participantes con sanción activa: {detalles}",
+                )
 
-                # 7.b) Determinar si aplican límites 2h/día y 3 reservas/semana
+            for ci in participantes:
+                # 7.a) Determinar si aplican límites 2h/día y 3 reservas/semana
+                tipo_participante = participantes_info[ci]["tipo_participante"]
                 aplicar_limites = False
                 if tipo_sala == "libre":
                     aplicar_limites = True
-                else:
-                    # Salas exclusivas: solo se aplican límites si NO es su tipo
-                    cur.execute(
-                        """
-                        SELECT pa.tipo, ppa.rol
-                        FROM participante_programa_academico ppa
-                        JOIN programa_academico pa
-                          ON pa.nombre_programa = ppa.nombre_programa
-                        WHERE ppa.ci_participante = %s
-                        """,
-                        (ci,),
-                    )
-                    filas = cur.fetchall()
-                    tiene_rol_docente = any(f["rol"] == "docente" for f in filas)
-                    es_posgrado = any(f["tipo"] == "posgrado" for f in filas)
-
-                    if tipo_sala == "docente":
-                        aplicar_limites = not tiene_rol_docente
-                    elif tipo_sala == "posgrado":
-                        aplicar_limites = not (es_posgrado or tiene_rol_docente)
+                elif tipo_sala == "docente":
+                    aplicar_limites = tipo_participante != "docente"
+                elif tipo_sala == "posgrado":
+                    aplicar_limites = tipo_participante == "estudiante"
 
                 if aplicar_limites:
                     # 2 horas diarias en salas de uso libre (contamos turnos activos)
@@ -954,7 +1051,15 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
                 detail="La reserva no tiene participantes; no se puede registrar asistencia.",
             )
 
+        participantes_reserva = {row["ci_participante"] for row in filas_part}
+
         presentes = set(payload.presentes or [])
+        desconocidos = [ci for ci in presentes if ci not in participantes_reserva]
+        if desconocidos:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Las CIs {', '.join(desconocidos)} no pertenecen a la reserva.",
+            )
 
         # 3) Marcar asistencia: primero todos en FALSE, luego los presentes en TRUE
         cur.execute(
@@ -986,10 +1091,8 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
         )
         asistentes = cur.fetchone()["asistentes"] or 0
 
-        if asistentes > 0:
-            nuevo_estado = "finalizada"
-        else:
-            nuevo_estado = "sin_asistencia"
+        ausentes = participantes_reserva - presentes
+        nuevo_estado = "finalizada" if asistentes > 0 else "sin_asistencia"
 
         # 5) Actualizar estado de la reserva
         cur.execute(
@@ -997,19 +1100,14 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
             (nuevo_estado, id_reserva),
         )
 
-        # 6) Si no hubo asistentes, generar sanciones (2 meses)
-        if asistentes == 0:
-            cur.execute(
+        # 6) Sancionar ausentes según configuración (2 meses)
+        if payload.sancionar_ausentes and ausentes:
+            cur.executemany(
                 """
                 INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
-                SELECT rp.ci_participante,
-                       r.fecha AS fecha_inicio,
-                       DATE_ADD(r.fecha, INTERVAL 2 MONTH) AS fecha_fin
-                FROM reserva_participante rp
-                JOIN reserva r ON r.id_reserva = rp.id_reserva
-                WHERE rp.id_reserva = %s
+                VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
                 """,
-                (id_reserva,),
+                [(ci, reserva["fecha"], reserva["fecha"]) for ci in ausentes],
             )
 
         conn.commit()
@@ -1139,7 +1237,7 @@ def listar_participantes():
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT ci, nombre, apellido, email
+            SELECT ci, nombre, apellido, email, tipo_participante
             FROM participante
             ORDER BY apellido, nombre
             """
@@ -1160,12 +1258,13 @@ def obtener_participante(ci: str = Path(..., description="CI del participante"))
     """
     Devuelve un participante por CI.
     """
+    ci = normalize_ci(ci)
     conn = get_conn()
     try:
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT ci, nombre, apellido, email
+            SELECT ci, nombre, apellido, email, tipo_participante
             FROM participante
             WHERE ci = %s
             """,
@@ -1196,10 +1295,10 @@ def crear_participante(p: ParticipanteCreate):
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO participante (ci, nombre, apellido, email)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO participante (ci, nombre, apellido, email, tipo_participante)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (p.ci, p.nombre, p.apellido, p.email),
+            (p.ci, p.nombre, p.apellido, p.email, p.tipo_participante),
         )
         conn.commit()
         return p
@@ -1227,6 +1326,7 @@ def actualizar_participante(
     Actualiza nombre, apellido y email de un participante existente.
     La CI se toma de la ruta y no se cambia.
     """
+    ci = normalize_ci(ci)
     conn = get_conn()
     try:
         cur = conn.cursor(dictionary=True)
@@ -1245,10 +1345,11 @@ def actualizar_participante(
             UPDATE participante
             SET nombre = %s,
                 apellido = %s,
-                email = %s
+                email = %s,
+                tipo_participante = %s
             WHERE ci = %s
             """,
-            (p.nombre, p.apellido, p.email, ci),
+            (p.nombre, p.apellido, p.email, p.tipo_participante, ci),
         )
         conn.commit()
 
@@ -1257,6 +1358,7 @@ def actualizar_participante(
             "nombre": p.nombre,
             "apellido": p.apellido,
             "email": p.email,
+            "tipo_participante": p.tipo_participante,
         }
     except mysql.connector.Error as e:
         if e.errno == 1062:
@@ -1281,6 +1383,7 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
     - 404 si no existe.
     - 409 si tiene reservas, programas o sanciones asociadas (violación de FK).
     """
+    ci = normalize_ci(ci)
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -1323,6 +1426,7 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
     try:
         cur = conn.cursor(dictionary=True)
         if ci:
+            ci = normalize_ci(ci)
             cur.execute(
                 """
                 SELECT ci_participante, fecha_inicio, fecha_fin
@@ -1387,6 +1491,7 @@ def actualizar_sancion(
 ):
     """Actualiza la fecha de fin de una sanción existente."""
 
+    ci = normalize_ci(ci)
     if payload.fecha_fin <= fecha_inicio:
         raise HTTPException(status_code=422, detail="fecha_fin debe ser posterior a fecha_inicio")
 
@@ -1436,6 +1541,7 @@ def eliminar_sancion(
 ):
     """Elimina una sanción manual."""
 
+    ci = normalize_ci(ci)
     conn = get_conn()
     try:
         cur = conn.cursor()
