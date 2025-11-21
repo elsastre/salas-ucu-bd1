@@ -3,95 +3,445 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Salas UCU - UI</title>
+    <title>Salas UCU - Panel</title>
     <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-    <header>
-        <h1>Salas UCU</h1>
-        <p>Interfaz mínima para consultar la API</p>
+    <header class="hero">
+        <div>
+            <p class="eyebrow">Sistema para Gestión de Reserva de Salas</p>
+            <h1>Salas UCU</h1>
+            <p class="lead">
+                Panel interno para administrativos y biblioteca. Gestiona salas, participantes, turnos, reservas,
+                asistencia, sanciones y reportes desde un solo lugar.
+            </p>
+        </div>
+        <div class="hero-actions">
+            <a class="btn ghost" href="/docs" target="_blank">Ver API /docs</a>
+            <a class="btn" href="#" id="reload-data">Recargar datos</a>
+        </div>
     </header>
 
+    <nav class="tabs" aria-label="Secciones de la aplicación">
+        <button class="tab active" data-target="salas-section">Salas</button>
+        <button class="tab" data-target="participantes-section">Participantes</button>
+        <button class="tab" data-target="turnos-section">Turnos</button>
+        <button class="tab" data-target="reservas-section">Reservas</button>
+        <button class="tab" data-target="disponibilidad-section">Disponibilidad</button>
+        <button class="tab" data-target="sanciones-section">Sanciones</button>
+        <button class="tab" data-target="reportes-section">Reportes</button>
+    </nav>
+
     <main>
-        <section>
-            <h2>Edificios</h2>
-            <button id="btn-edificios">Actualizar</button>
-            <ul id="lista-edificios"></ul>
-        </section>
-
-        <section>
-            <h2>Salas</h2>
-            <button id="btn-salas">Actualizar</button>
-            <ul id="lista-salas"></ul>
-        </section>
-
-        <section>
-            <h2>Disponibilidad</h2>
-            <form id="form-disponibilidad">
-                <label>Fecha: <input type="date" id="fecha" required /></label>
-                <label>Edificio: <input type="text" id="edificio" required placeholder="Ej: B" /></label>
-                <label>Sala: <input type="text" id="sala" required placeholder="Ej: 103" /></label>
-                <button type="submit">Consultar</button>
-            </form>
-            <div id="disponibilidad"></div>
-        </section>
-
-        <section>
-            <h2>Turnos</h2>
-            <div class="controls">
-                <button id="btn-turnos">Listar turnos</button>
-                <label>Id turno: <input type="number" id="turno-id" min="0" /></label>
-                <button id="btn-turno-detalle">Buscar</button>
+        <section id="salas-section" class="panel visible">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Salas</p>
+                    <h2>ABM de salas</h2>
+                    <p class="help">Crea, edita o elimina salas. Usa los filtros por edificio y respeta el tipo y la capacidad.</p>
+                </div>
+                <div class="filters">
+                    <label>Edificio
+                        <select id="salas-filtro-edificio"></select>
+                    </label>
+                    <button class="btn secondary" id="salas-refresh">Actualizar</button>
+                </div>
             </div>
-            <ul id="lista-turnos"></ul>
-            <div id="turno-detalle"></div>
-        </section>
-
-        <section>
-            <h2>Participantes</h2>
-            <div class="controls">
-                <button id="btn-participantes">Listar participantes</button>
-                <label>CI: <input type="text" id="participante-ci" placeholder="Ej: 4.123.456-7" /></label>
-                <button id="btn-participante-detalle">Buscar</button>
+            <div class="grid two">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Listado</h3>
+                        <p class="muted">Incluye tipo de sala y capacidad. Puedes editar o eliminar cada registro.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr><th>Edificio</th><th>Sala</th><th>Capacidad</th><th>Tipo</th><th>Acciones</th></tr>
+                            </thead>
+                            <tbody id="salas-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert" id="salas-msg"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Crear / Editar sala</h3>
+                        <p class="muted">Selecciona desde la tabla para editar. Los campos edificio y nombre no cambian en edición.</p>
+                    </div>
+                    <form id="salas-form" class="form-grid">
+                        <label>Edificio
+                            <select id="sala-edificio" required></select>
+                        </label>
+                        <label>Nombre sala
+                            <input type="text" id="sala-nombre" required />
+                        </label>
+                        <label>Capacidad
+                            <input type="number" id="sala-capacidad" min="1" required />
+                        </label>
+                        <label>Tipo
+                            <select id="sala-tipo" required>
+                                <option value="libre">Uso libre</option>
+                                <option value="posgrado">Exclusiva posgrado</option>
+                                <option value="docente">Exclusiva docentes</option>
+                            </select>
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Guardar sala</button>
+                            <button type="button" id="sala-reset" class="btn ghost">Limpiar</button>
+                        </div>
+                        <div class="alert" id="sala-form-msg"></div>
+                    </form>
+                </div>
             </div>
-            <ul id="lista-participantes"></ul>
-            <div id="participante-detalle"></div>
-
-            <h3>Crear participante</h3>
-            <form id="form-participante">
-                <label>CI: <input type="text" id="nuevo-ci" required /></label>
-                <label>Nombre: <input type="text" id="nuevo-nombre" required /></label>
-                <label>Apellido: <input type="text" id="nuevo-apellido" required /></label>
-                <label>Email: <input type="email" id="nuevo-email" required /></label>
-                <button type="submit">Crear</button>
-            </form>
-            <div id="participante-msg"></div>
         </section>
 
-        <section>
-            <h2>Reservas</h2>
-            <button id="btn-reservas">Actualizar</button>
-            <ul id="lista-reservas"></ul>
+        <section id="participantes-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Participantes</p>
+                    <h2>ABM de participantes</h2>
+                    <p class="help">Administra CI, nombre y correo. Se puede buscar por CI y editar datos sin cambiar la CI.</p>
+                </div>
+                <div class="filters">
+                    <label>Buscar CI
+                        <input type="text" id="participantes-search" placeholder="Ej: 41234567" />
+                    </label>
+                    <button class="btn secondary" id="participantes-refresh">Buscar</button>
+                </div>
+            </div>
+            <div class="grid two">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Listado</h3>
+                        <p class="muted">Incluye email. Los roles/programas se muestran si están asociados.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr><th>CI</th><th>Nombre</th><th>Email</th><th>Acciones</th></tr>
+                            </thead>
+                            <tbody id="participantes-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert" id="participantes-msg"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Crear / Editar participante</h3>
+                        <p class="muted">Completa todos los campos. El email valida formato básico.</p>
+                    </div>
+                    <form id="participantes-form" class="form-grid">
+                        <label>CI
+                            <input type="text" id="part-ci" required />
+                        </label>
+                        <label>Nombre
+                            <input type="text" id="part-nombre" required />
+                        </label>
+                        <label>Apellido
+                            <input type="text" id="part-apellido" required />
+                        </label>
+                        <label>Email
+                            <input type="email" id="part-email" required />
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Guardar participante</button>
+                            <button type="button" id="part-reset" class="btn ghost">Limpiar</button>
+                        </div>
+                        <div class="alert" id="participantes-form-msg"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
 
-            <h3>Crear reserva</h3>
-            <form id="form-reserva">
-                <label>Edificio: <input type="text" id="reserva-edificio" required placeholder="Ej: B" /></label>
-                <label>Sala: <input type="text" id="reserva-sala" required placeholder="Ej: 103" /></label>
-                <label>Fecha: <input type="date" id="reserva-fecha" required /></label>
-                <label>Id turno: <input type="number" id="reserva-turno" required min="0" /></label>
-                <label>Participantes (CI, separadas por coma): <input type="text" id="reserva-participantes" required placeholder="12345678,23456789" /></label>
-                <label>Estado (opcional): <input type="text" id="reserva-estado" placeholder="activa" /></label>
-                <button type="submit">Crear reserva</button>
-            </form>
-            <div id="reserva-msg"></div>
+        <section id="turnos-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Turnos</p>
+                    <h2>ABM de turnos horarios</h2>
+                    <p class="help">Bloques de 1 hora entre 08:00 y 23:00. Validación simple de inicio < fin.</p>
+                </div>
+                <button class="btn secondary" id="turnos-refresh">Actualizar</button>
+            </div>
+            <div class="grid two">
+                <div class="card">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr><th>ID</th><th>Inicio</th><th>Fin</th><th>Acciones</th></tr>
+                            </thead>
+                            <tbody id="turnos-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert" id="turnos-msg"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Crear / Editar turno</h3>
+                        <p class="muted">Selecciona en la tabla para editar. El ID solo se usa en creación.</p>
+                    </div>
+                    <form id="turnos-form" class="form-grid">
+                        <label>ID turno
+                            <input type="number" id="turno-id" min="0" required />
+                        </label>
+                        <label>Hora inicio
+                            <input type="time" id="turno-inicio" min="08:00" max="22:00" required />
+                        </label>
+                        <label>Hora fin
+                            <input type="time" id="turno-fin" min="09:00" max="23:00" required />
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Guardar turno</button>
+                            <button type="button" id="turno-reset" class="btn ghost">Limpiar</button>
+                        </div>
+                        <div class="alert" id="turnos-form-msg"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
 
-            <h3>Registrar asistencia</h3>
-            <form id="form-asistencia">
-                <label>ID reserva: <input type="number" id="asistencia-id" required min="0" /></label>
-                <label>CI presentes (separadas por coma, opcional): <input type="text" id="asistencia-presentes" placeholder="12345678,23456789" /></label>
-                <button type="submit">Registrar asistencia</button>
-            </form>
-            <div id="asistencia-msg"></div>
+        <section id="reservas-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Reservas</p>
+                    <h2>Gestión completa de reservas</h2>
+                    <p class="help">Respeta capacidad, límites de uso libre, estados válidos y sanciones por inasistencia.</p>
+                </div>
+                <div class="filters">
+                    <label>Fecha
+                        <input type="date" id="reservas-filtro-fecha" />
+                    </label>
+                    <label>Edificio
+                        <select id="reservas-filtro-edificio"></select>
+                    </label>
+                    <label>Estado
+                        <select id="reservas-filtro-estado">
+                            <option value="">Todos</option>
+                            <option value="activa">Activa</option>
+                            <option value="cancelada">Cancelada</option>
+                            <option value="sin_asistencia">Sin asistencia</option>
+                            <option value="finalizada">Finalizada</option>
+                        </select>
+                    </label>
+                    <button class="btn secondary" id="reservas-refresh">Actualizar</button>
+                </div>
+            </div>
+            <div class="grid two">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Listado</h3>
+                        <p class="muted">Incluye participantes y estado. Cambia estado o registra asistencia desde aquí.</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr><th>ID</th><th>Edificio / Sala</th><th>Fecha</th><th>Turno</th><th>Estado</th><th>Participantes</th><th>Acciones</th></tr>
+                            </thead>
+                            <tbody id="reservas-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert" id="reservas-msg"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Crear reserva</h3>
+                        <p class="muted">Ingresa todos los participantes (CIs separadas por coma). Estados válidos: activa, cancelada, sin_asistencia, finalizada.</p>
+                    </div>
+                    <form id="reservas-form" class="form-grid">
+                        <label>Fecha
+                            <input type="date" id="res-fecha" required />
+                        </label>
+                        <label>Edificio
+                            <select id="res-edificio" required></select>
+                        </label>
+                        <label>Sala
+                            <select id="res-sala" required></select>
+                        </label>
+                        <label>Turno
+                            <select id="res-turno" required></select>
+                        </label>
+                        <label>Participantes (CI separadas por coma)
+                            <textarea id="res-participantes" rows="2" placeholder="12345678,23456789" required></textarea>
+                        </label>
+                        <label>Estado
+                            <select id="res-estado">
+                                <option value="activa">activa</option>
+                                <option value="cancelada">cancelada</option>
+                                <option value="sin_asistencia">sin_asistencia</option>
+                                <option value="finalizada">finalizada</option>
+                            </select>
+                        </label>
+                        <div class="callout">
+                            <strong>Reglas clave:</strong>
+                            <ul>
+                                <li>Límite 2 horas diarias y 3 reservas activas semanales en salas de uso libre.</li>
+                                <li>Docentes y posgrado no tienen límite en sus salas exclusivas.</li>
+                                <li>No exceder la capacidad de la sala.</li>
+                                <li>Si nadie asiste, todos quedan sancionados por 2 meses.</li>
+                            </ul>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Guardar reserva</button>
+                            <button type="button" id="res-reset" class="btn ghost">Limpiar</button>
+                        </div>
+                        <div class="alert" id="reservas-form-msg"></div>
+                    </form>
+
+                    <div class="card-divider"></div>
+
+                    <div class="card-header">
+                        <h3>Registrar asistencia</h3>
+                        <p class="muted">Si no marcas presentes, se generarán sanciones automáticas.</p>
+                    </div>
+                    <form id="asistencia-form" class="form-grid">
+                        <label>ID reserva
+                            <input type="number" id="asis-id" min="1" required />
+                        </label>
+                        <label>CI presentes (coma)
+                            <textarea id="asis-presentes" rows="2" placeholder="12345678,23456789"></textarea>
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn secondary">Registrar asistencia</button>
+                        </div>
+                        <div class="alert" id="asistencia-msg"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section id="disponibilidad-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Disponibilidad</p>
+                    <h2>Consulta de turnos libres</h2>
+                    <p class="help">Consulta por fecha, edificio y sala. Reserva directamente un turno libre.</p>
+                </div>
+            </div>
+            <div class="card">
+                <form id="disponibilidad-form" class="form-grid">
+                    <label>Fecha
+                        <input type="date" id="disp-fecha" required />
+                    </label>
+                    <label>Edificio
+                        <select id="disp-edificio" required></select>
+                    </label>
+                    <label>Sala
+                        <select id="disp-sala" required></select>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="btn">Consultar disponibilidad</button>
+                    </div>
+                    <div class="alert" id="disponibilidad-msg"></div>
+                </form>
+
+                <div class="table-wrapper mt">
+                    <table>
+                        <thead>
+                            <tr><th>Turno</th><th>Horario</th><th>Estado</th><th>Acciones</th></tr>
+                        </thead>
+                        <tbody id="disponibilidad-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="sanciones-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Sanciones</p>
+                    <h2>ABM de sanciones</h2>
+                    <p class="help">Las sanciones también se generan automáticamente cuando nadie asiste a una reserva.</p>
+                </div>
+                <div class="filters">
+                    <label>Filtrar por CI
+                        <input type="text" id="sanciones-filtro-ci" placeholder="Opcional" />
+                    </label>
+                    <button class="btn secondary" id="sanciones-refresh">Actualizar</button>
+                </div>
+            </div>
+            <div class="grid two">
+                <div class="card">
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr><th>CI</th><th>Inicio</th><th>Fin</th><th>Acciones</th></tr>
+                            </thead>
+                            <tbody id="sanciones-table"></tbody>
+                        </table>
+                    </div>
+                    <div class="alert" id="sanciones-msg"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Crear / Editar sanción</h3>
+                        <p class="muted">Usa fechas en formato YYYY-MM-DD. Selecciona desde la tabla para editar fecha fin.</p>
+                    </div>
+                    <form id="sanciones-form" class="form-grid">
+                        <label>CI participante
+                            <input type="text" id="sancion-ci" required />
+                        </label>
+                        <label>Fecha inicio
+                            <input type="date" id="sancion-inicio" required />
+                        </label>
+                        <label>Fecha fin
+                            <input type="date" id="sancion-fin" required />
+                        </label>
+                        <div class="form-actions">
+                            <button type="submit" class="btn">Guardar sanción</button>
+                            <button type="button" id="sancion-reset" class="btn ghost">Limpiar</button>
+                        </div>
+                        <div class="alert" id="sanciones-form-msg"></div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section id="reportes-section" class="panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Reportes</p>
+                    <h2>Uso y ocupación</h2>
+                    <p class="help">Consulta salas más usadas, ocupación por edificio y uso por rol. Los filtros de fecha son opcionales.</p>
+                </div>
+                <div class="filters">
+                    <label>Desde
+                        <input type="date" id="reportes-desde" />
+                    </label>
+                    <label>Hasta
+                        <input type="date" id="reportes-hasta" />
+                    </label>
+                    <button class="btn secondary" id="reportes-refresh">Actualizar reportes</button>
+                </div>
+            </div>
+            <div class="grid three">
+                <div class="card">
+                    <h3>Salas más reservadas</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Edificio</th><th>Sala</th><th>Total reservas</th></tr></thead>
+                            <tbody id="reporte-salas"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Ocupación por edificio</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Edificio</th><th>Total</th><th>% sobre total</th></tr></thead>
+                            <tbody id="reporte-ocupacion"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Uso por rol / programa</h3>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Rol</th><th>Tipo programa</th><th>Total reservas</th></tr></thead>
+                            <tbody id="reporte-rol"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="alert" id="reportes-msg"></div>
         </section>
     </main>
 
