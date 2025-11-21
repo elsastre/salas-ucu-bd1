@@ -15,7 +15,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # --------- DB ---------
 def get_conn():
-    return mysql.connector.connect(
+    conn = mysql.connector.connect(
         host=os.getenv("DB_HOST", "127.0.0.1"),
         port=int(os.getenv("DB_PORT", "3306")),
         user=os.getenv("DB_USER", "root"),
@@ -23,6 +23,8 @@ def get_conn():
         database=os.getenv("DB_NAME", "salas_db"),
         autocommit=True
     )
+    ensure_schema_migrations(conn)
+    return conn
 
 # Para compatibilidad con el código existente
 def get_reservas_connection():
@@ -32,6 +34,44 @@ def get_reservas_connection():
 from datetime import time, timedelta
 
 CI_CLEAN_RE = re.compile(r"\D")
+
+
+_MIGRATIONS_APPLIED = False
+
+
+def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
+    """
+    Aplica migraciones ligeras para entornos ya inicializados con un schema
+    anterior (por ejemplo, bases levantadas antes de agregar el campo
+    tipo_participante).
+
+    Esto evita errores 500 de "Unknown column 'tipo_participante'" cuando el
+    volumen de datos persiste entre levantadas de Docker.
+    """
+    global _MIGRATIONS_APPLIED
+    if _MIGRATIONS_APPLIED:
+        return
+
+    cur = conn.cursor()
+    try:
+        cur.execute("SHOW COLUMNS FROM participante LIKE 'tipo_participante'")
+        if cur.fetchone() is None:
+            cur.execute(
+                """
+                ALTER TABLE participante
+                ADD COLUMN IF NOT EXISTS tipo_participante
+                ENUM('estudiante','docente','posgrado')
+                NOT NULL DEFAULT 'estudiante'
+                """
+            )
+        _MIGRATIONS_APPLIED = True
+    except mysql.connector.Error as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error aplicando migraciones: {e}",
+        )
+    finally:
+        cur.close()
 
 
 def normalize_ci(ci: str) -> str:
