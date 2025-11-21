@@ -14,6 +14,15 @@ const state = {
   turnos: [],
 };
 
+function requestSubmit(form) {
+  if (!form) return;
+  if (typeof form.requestSubmit === 'function') {
+    form.requestSubmit();
+  } else {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  }
+}
+
 const sessionManager = {
   currentUser: null,
   loadFromStorage() {
@@ -1145,6 +1154,7 @@ function updateSessionUI() {
   if (shell) shell.style.display = hasUser ? 'block' : 'none';
   if (loginCard) loginCard.style.display = hasUser ? 'none' : 'block';
   if (sessionCard) sessionCard.style.display = hasUser ? 'flex' : 'none';
+  if (!hasUser && loginInput) loginInput.focus();
   if (info) {
     if (hasUser) {
       const u = sessionManager.currentUser;
@@ -1243,21 +1253,41 @@ async function startApp() {
 async function handleLogin(evt) {
   evt.preventDefault();
   const msg = qs('#login-msg');
+  const submitBtn = qs('#login-submit');
   setAlert(msg, '');
   const ci = validateCi(qs('#login-ci').value, msg);
   if (!ci) return;
   try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Ingresando...';
+    }
     const user = await apiRequest('POST', `${apiBase}/auth/login`, { ci }, msg);
     sessionManager.save(user);
     setAlert(msg, 'Sesión iniciada', 'success');
     await startApp();
-  } catch (_) {}
+  } catch (_) {
+    /* handled by apiRequest */
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Entrar';
+    }
+  }
 }
 
 function bootstrap() {
   sessionManager.loadFromStorage();
   updateSessionUI();
-  qs('#login-form').addEventListener('submit', handleLogin);
+  const loginForm = qs('#login-form');
+  const loginInput = qs('#login-ci');
+  loginForm?.addEventListener('submit', handleLogin);
+  loginInput?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      requestSubmit(loginForm);
+    }
+  });
   qs('#logout-btn').addEventListener('click', () => {
     sessionManager.clear();
     updateSessionUI();
