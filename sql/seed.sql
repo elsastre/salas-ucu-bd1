@@ -28,6 +28,7 @@ INSERT IGNORE INTO sala (nombre_sala, edificio, capacidad, tipo_sala) VALUES
   ('Sala 201 Posgrado', 'Sede Central', 8, 'posgrado'),
   ('Sala 301 Docente', 'Sede Central', 6, 'docente'),
   ('Sala P1',  'Campus Pocitos', 8, 'posgrado'),
+  -- Sala libre dedicada para pruebas de capacidad
   ('Sala Mini', 'Sede Central', 2, 'libre');
 
 INSERT IGNORE INTO turno (id_turno, hora_inicio, hora_fin) VALUES
