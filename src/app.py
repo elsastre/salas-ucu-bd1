@@ -861,13 +861,33 @@ def create_reserva(payload: ReservaIn):
                 detail="Debe indicar al menos un participante para la reserva.",
             )
 
-        # 5) Validar existencia de participantes
+        # 5) Validar existencia de participantes + metadata de programas (grado/posgrado)
         placeholders = ",".join(["%s"] * len(participantes))
         cur.execute(
-            f"SELECT ci, tipo_participante FROM participante WHERE ci IN ({placeholders})",
+            f"""
+            SELECT
+              p.ci,
+              p.tipo_participante,
+              MAX(CASE WHEN pa.tipo = 'posgrado' AND ppa.rol = 'docente' THEN 1 ELSE 0 END) AS es_docente_posgrado,
+              MAX(CASE WHEN pa.tipo = 'posgrado' AND ppa.rol = 'alumno'  THEN 1 ELSE 0 END) AS es_alumno_posgrado
+            FROM participante p
+            LEFT JOIN participante_programa_academico ppa
+              ON ppa.ci_participante = p.ci
+            LEFT JOIN programa_academico pa
+              ON pa.nombre_programa = ppa.nombre_programa
+            WHERE p.ci IN ({placeholders})
+            GROUP BY p.ci, p.tipo_participante
+            """,
             tuple(participantes),
         )
-        participantes_info = {row["ci"]: row for row in cur.fetchall()}
+        participantes_info = {}
+        for row in cur.fetchall():
+            participantes_info[row["ci"]] = {
+                "ci": row["ci"],
+                "tipo_participante": row["tipo_participante"],
+                "es_docente_posgrado": bool(row["es_docente_posgrado"]),
+                "es_alumno_posgrado": bool(row["es_alumno_posgrado"]),
+            }
         faltantes = [ci for ci in participantes if ci not in participantes_info]
         if faltantes:
             raise HTTPException(
@@ -876,17 +896,25 @@ def create_reserva(payload: ReservaIn):
             )
 
         # 5.b) Validar exclusividad por tipo de sala
-        allowed_por_sala = {
-            "posgrado": {"posgrado", "docente"},
-            "docente": {"docente", "posgrado"},
+        def _es_posgrado(info: dict[str, Any]) -> bool:
+            return (
+                info["tipo_participante"] == "posgrado"
+                or info.get("es_alumno_posgrado")
+                or info.get("es_docente_posgrado")
+            )
+
+        exclusividades: dict[str, Any] = {
+            "posgrado": lambda info: _es_posgrado(info),
+            "docente": lambda info: info["tipo_participante"] == "docente"
+            or info.get("es_docente_posgrado"),
         }
 
-        if tipo_sala in allowed_por_sala:
-            habilitados = allowed_por_sala[tipo_sala]
+        if tipo_sala in exclusividades:
+            habilitador = exclusividades[tipo_sala]
             no_aptos = [
                 ci
                 for ci, info in participantes_info.items()
-                if info["tipo_participante"] not in habilitados
+                if not habilitador(info)
             ]
             if no_aptos:
                 raise HTTPException(

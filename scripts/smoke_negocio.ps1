@@ -5,14 +5,18 @@ Param(
 $base      = $BaseUrl
 $ciAlumno  = "41234567"   # Matihas (grado)
 $ciDocente = "59876543"   # Ada (docente posgrado)
+$ciCapA    = "43333333"   # Beto (estudiante)
+$ciCapB    = "44444444"   # Caro (estudiante)
 
 # Idempotencia: limpiar huellas de ejecuciones previas en las fechas de prueba
 $fechasSmoke = @(
     "2030-01-10", "2030-01-11", "2030-01-12", # límite diario + sanción
     "2030-02-12", "2030-02-13", "2030-02-14", "2030-02-15", # límite semanal
-    "2030-03-01", "2030-03-02" # rol vs sala posgrado
+    "2030-03-01", "2030-03-02", # rol vs sala posgrado
+    "2030-04-01",                 # capacidad de sala
+    "2030-04-10", "2030-04-11", "2030-04-12" # exención diaria/semanal en sala posgrado
 )
-$bodyClean = @{ participantes = @($ciAlumno, $ciDocente); fechas = $fechasSmoke } | ConvertTo-Json
+$bodyClean = @{ participantes = @($ciAlumno, $ciDocente, $ciCapA, $ciCapB); fechas = $fechasSmoke } | ConvertTo-Json
 try {
     Write-Host "[0] Limpiando datos de smoke (reservas/sanciones de pruebas)" -ForegroundColor Yellow
     Invoke-RestMethod "$base/admin/limpiar-smoke" -Method POST -ContentType "application/json" -Body $bodyClean | Out-Null
@@ -208,6 +212,82 @@ try {
 } catch {
     Write-Host "¡¡OJO!! No se pudo reservar sala posgrado con docente/posgrado apto."
     $_.ErrorDetails.Message
+}
+
+Write-Host "`n[6] Capacidad de sala (Sala Mini, cap = 2)"
+
+$fechaCap = "2030-04-01"
+$bodyCapExceso = @{
+    nombre_sala   = "Sala Mini"
+    edificio      = "Sede Central"
+    fecha         = $fechaCap
+    id_turno      = 8
+    participantes = @($ciAlumno, $ciCapA, $ciCapB) # 3 participantes en sala de 2
+} | ConvertTo-Json -Depth 5
+
+$bodyCapOk = @{
+    nombre_sala   = "Sala Mini"
+    edificio      = "Sede Central"
+    fecha         = $fechaCap
+    id_turno      = 9
+    participantes = @($ciAlumno, $ciCapA) # 2 participantes dentro de capacidad
+} | ConvertTo-Json -Depth 5
+
+Write-Host "`n[6.1] Intento exceder capacidad (debe FALLAR)"
+try {
+    Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyCapExceso -ErrorAction Stop | Out-Null
+    Write-Host "¡¡OJO!! Se pudo reservar con capacidad excedida y no debería."
+} catch {
+    Write-Host "Reserva rechazada como se esperaba por capacidad excedida."; $_.ErrorDetails.Message
+}
+
+Write-Host "`n[6.2] Reserva dentro de capacidad (debe PASAR)"
+try {
+    $capOk = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyCapOk -ErrorAction Stop
+    $capOk
+} catch {
+    Write-Host "¡¡OJO!! La reserva dentro de capacidad falló y no debería."; $_.ErrorDetails.Message
+}
+
+Write-Host "`n[7] Exención de límites diario/semanal para docente/posgrado en sala exclusiva"
+
+$fechaPosEx = "2030-04-10"
+$fechaPosEx2 = "2030-04-11"
+$fechaPosEx3 = "2030-04-12"
+
+function New-ReservaPosgrado {
+    param(
+        [string]$fecha,
+        [int]$turno
+    )
+    $body = @{
+        nombre_sala   = "Sala P1"
+        edificio      = "Campus Pocitos"
+        fecha         = $fecha
+        id_turno      = $turno
+        participantes = @($ciDocente)
+    } | ConvertTo-Json -Depth 5
+
+    Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body -ErrorAction Stop
+}
+
+Write-Host "`n[7.1] Más de 2 horas en el mismo día (debe PASAR en sala posgrado)"
+try {
+    $px1 = New-ReservaPosgrado -fecha $fechaPosEx -turno 8
+    $px2 = New-ReservaPosgrado -fecha $fechaPosEx -turno 9
+    $px3 = New-ReservaPosgrado -fecha $fechaPosEx -turno 10
+    $px1; $px2; $px3
+} catch {
+    Write-Host "¡¡OJO!! Alguna reserva diaria en sala posgrado falló (no deberían aplicar límites)."; $_.ErrorDetails.Message
+}
+
+Write-Host "`n[7.2] Más de 3 reservas en la misma semana (debe PASAR en sala posgrado)"
+try {
+    $pw1 = New-ReservaPosgrado -fecha $fechaPosEx2 -turno 11
+    $pw2 = New-ReservaPosgrado -fecha $fechaPosEx3 -turno 12
+    $pw1; $pw2
+} catch {
+    Write-Host "¡¡OJO!! Alguna reserva semanal en sala posgrado falló y no debería."; $_.ErrorDetails.Message
 }
 
 Write-Host "`n== Smoke negocio BD1 terminado =="
