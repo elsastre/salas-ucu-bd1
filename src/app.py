@@ -54,12 +54,15 @@ def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
 
     cur = conn.cursor()
     try:
+        # MySQL no soporta "ADD COLUMN IF NOT EXISTS". Para que la migración
+        # sea idempotente, verificamos primero si la columna está presente y
+        # solo ejecutamos el ALTER cuando falta.
         cur.execute("SHOW COLUMNS FROM participante LIKE 'tipo_participante'")
         if cur.fetchone() is None:
             cur.execute(
                 """
                 ALTER TABLE participante
-                ADD COLUMN IF NOT EXISTS tipo_participante
+                ADD COLUMN tipo_participante
                 ENUM('estudiante','docente','posgrado')
                 NOT NULL DEFAULT 'estudiante'
                 """
