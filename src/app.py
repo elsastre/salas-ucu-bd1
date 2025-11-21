@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices
 from typing import List, Literal, Any
 import os, mysql.connector, re
 from datetime import timedelta, date
@@ -273,11 +274,16 @@ class ReportUsoPorRol(BaseModel):
 
 # --------- MODELOS SANCIONES ---------
 class SancionBase(BaseModel):
-    ci_participante: str
+    ci: str = Field(
+        ...,
+        validation_alias=AliasChoices("ci", "ci_participante"),
+        serialization_alias="ci",
+        description="CI del participante sancionado",
+    )
     fecha_inicio: date
     fecha_fin: date
 
-    @field_validator("ci_participante")
+    @field_validator("ci")
     @classmethod
     def _val_ci(cls, v):
         return normalize_ci(v)
@@ -827,11 +833,17 @@ def create_reserva(payload: ReservaIn):
 
         # 2) Validar turno
         cur.execute(
-            "SELECT id_turno FROM turno WHERE id_turno = %s",
+            "SELECT id_turno, hora_inicio, hora_fin FROM turno WHERE id_turno = %s",
             (payload.id_turno,),
         )
-        if not cur.fetchone():
+        turno_row = cur.fetchone()
+        if not turno_row:
             raise HTTPException(status_code=404, detail="Turno no encontrado")
+
+        turno_duracion_horas = (
+            _parse_hms(_time_to_str(turno_row["hora_fin"]))
+            - _parse_hms(_time_to_str(turno_row["hora_inicio"]))
+        ) / 3600
 
         # 3) Normalizar y validar estado
         estado = (payload.estado or "activa").strip().lower()
@@ -864,11 +876,17 @@ def create_reserva(payload: ReservaIn):
             )
 
         # 5.b) Validar exclusividad por tipo de sala
-        if tipo_sala in {"posgrado", "docente"}:
+        allowed_por_sala = {
+            "posgrado": {"posgrado", "docente"},
+            "docente": {"docente", "posgrado"},
+        }
+
+        if tipo_sala in allowed_por_sala:
+            habilitados = allowed_por_sala[tipo_sala]
             no_aptos = [
                 ci
                 for ci, info in participantes_info.items()
-                if info["tipo_participante"] != tipo_sala
+                if info["tipo_participante"] not in habilitados
             ]
             if no_aptos:
                 raise HTTPException(
@@ -914,7 +932,7 @@ def create_reserva(payload: ReservaIn):
                 # 7.a) Límite diario/semanal solo para salas de uso libre
                 if tipo_sala == "libre":
                     horas_dia = horas_reservadas_libre(ci)
-                    if horas_dia >= 2:
+                    if horas_dia + turno_duracion_horas > 2:
                         raise HTTPException(
                             status_code=409,
                             detail=(
@@ -1504,7 +1522,15 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
                 ORDER BY fecha_inicio DESC
                 """
             )
-        return cur.fetchall()
+        rows = cur.fetchall()
+        return [
+            {
+                "ci": row["ci_participante"],
+                "fecha_inicio": row["fecha_inicio"],
+                "fecha_fin": row["fecha_fin"],
+            }
+            for row in rows
+        ]
     except mysql.connector.Error as e:
         raise HTTPException(status_code=500, detail=f"Error consultando sanciones: {e}")
     finally:
@@ -1523,10 +1549,10 @@ def crear_sancion(payload: SancionCreate):
             INSERT INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
             VALUES (%s, %s, %s)
             """,
-            (payload.ci_participante, payload.fecha_inicio, payload.fecha_fin),
+            (payload.ci, payload.fecha_inicio, payload.fecha_fin),
         )
         conn.commit()
-        return payload
+        return payload.model_dump(by_alias=True)
     except mysql.connector.Error as e:
         if e.errno == 1452:
             raise HTTPException(
@@ -1582,7 +1608,7 @@ def actualizar_sancion(
         conn.commit()
 
         return {
-            "ci_participante": ci,
+            "ci": ci,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": payload.fecha_fin,
         }

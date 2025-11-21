@@ -23,6 +23,8 @@ INSERT IGNORE INTO participante_programa_academico (ci_participante, nombre_prog
 INSERT IGNORE INTO sala (nombre_sala, edificio, capacidad, tipo_sala) VALUES
   ('Sala 101', 'Sede Central', 6, 'libre'),
   ('Sala 102', 'Sede Central', 10, 'libre'),
+  ('Sala 201 Posgrado', 'Sede Central', 8, 'posgrado'),
+  ('Sala 301 Docente', 'Sede Central', 6, 'docente'),
   ('Sala P1',  'Campus Pocitos', 8, 'posgrado');
 
 INSERT IGNORE INTO turno (id_turno, hora_inicio, hora_fin) VALUES
