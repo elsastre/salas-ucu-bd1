@@ -23,13 +23,25 @@ function requestSubmit(form) {
   }
 }
 
+function computeIsAdmin(user) {
+  if (!user) return false;
+  if (typeof user.isAdmin === 'boolean') return user.isAdmin;
+  return (
+    user.es_admin === true ||
+    ['docente', 'posgrado'].includes(user.tipo_participante) ||
+    false
+  );
+}
+
 const sessionManager = {
   currentUser: null,
   loadFromStorage() {
     try {
       const raw = localStorage.getItem('currentUser');
       if (raw) {
-        this.currentUser = JSON.parse(raw);
+        const stored = JSON.parse(raw);
+        stored.isAdmin = computeIsAdmin(stored);
+        this.currentUser = stored;
         window.currentUser = this.currentUser;
       }
     } catch (_) {
@@ -37,9 +49,10 @@ const sessionManager = {
     }
   },
   save(user) {
-    this.currentUser = user;
-    window.currentUser = user;
-    localStorage.setItem('currentUser', JSON.stringify(user));
+    const enriched = { ...user, isAdmin: computeIsAdmin(user) };
+    this.currentUser = enriched;
+    window.currentUser = enriched;
+    localStorage.setItem('currentUser', JSON.stringify(enriched));
     updateSessionUI();
   },
   clear() {
@@ -49,7 +62,7 @@ const sessionManager = {
     updateSessionUI();
   },
   isAdmin() {
-    return !!this.currentUser?.es_admin;
+    return !!this.currentUser?.isAdmin;
   },
 };
 
@@ -98,10 +111,18 @@ async function apiRequest(method, url, body, msgEl) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const text = await res.text();
-    let payload = text ? JSON.parse(text) : null;
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch (_) {
+      payload = text;
+    }
     if (!res.ok) {
-      const detail = payload?.detail ? `: ${payload.detail}` : '';
-      throw new Error(`Error ${res.status}${detail}`);
+      const detail = payload?.detail || payload?.message || null;
+      const error = new Error(detail || `Error ${res.status}`);
+      error.status = res.status;
+      error.detail = detail;
+      throw error;
     }
     if (msgEl) setAlert(msgEl, 'Listo', 'success');
     return payload;
@@ -1142,11 +1163,13 @@ function setTodayDefaults() {
 }
 
 function updateSessionUI() {
-  const shell = qs('#app-shell');
-  const loginCard = qs('#login-card');
+  const shell = qs('#mainTabs') || qs('#app-shell');
+  const loginCard = qs('#loginCard') || qs('#login-card');
   const sessionCard = qs('#session-card');
   const info = qs('#session-info');
   const tags = qs('#session-tags');
+  const loginMsg = qs('#loginMessage') || qs('#login-msg');
+  const loginInput = document.getElementById('ciLogin') || qs('#login-ci');
   const hasUser = !!sessionManager.currentUser;
   const isAdmin = sessionManager.isAdmin();
   document.body.classList.toggle('has-session', hasUser);
@@ -1155,6 +1178,7 @@ function updateSessionUI() {
   if (loginCard) loginCard.style.display = hasUser ? 'none' : 'block';
   if (sessionCard) sessionCard.style.display = hasUser ? 'flex' : 'none';
   if (!hasUser && loginInput) loginInput.focus();
+  if (!hasUser && loginMsg) setAlert(loginMsg, '');
   if (info) {
     if (hasUser) {
       const u = sessionManager.currentUser;
@@ -1252,22 +1276,34 @@ async function startApp() {
 
 async function handleLogin(evt) {
   evt.preventDefault();
-  const msg = qs('#login-msg');
-  const submitBtn = qs('#login-submit');
+  const msg = qs('#loginMessage') || qs('#login-msg');
+  const submitBtn = qs('#loginSubmit') || qs('#login-submit');
+  const ciInput = qs('#ciLogin') || qs('#login-ci');
   setAlert(msg, '');
-  const ci = validateCi(qs('#login-ci').value, msg);
-  if (!ci) return;
+  const normalizedCi = normalizeCi(ciInput?.value);
+  if (!normalizedCi) {
+    setAlert(msg, 'La CI debe tener 7 u 8 dígitos (con o sin puntos/guiones).', 'error');
+    return;
+  }
   try {
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = 'Ingresando...';
     }
-    const user = await apiRequest('POST', `${apiBase}/auth/login`, { ci }, msg);
+    const user = await apiRequest('GET', `${apiBase}/participantes/${normalizedCi}`, null, msg);
     sessionManager.save(user);
-    setAlert(msg, 'Sesión iniciada', 'success');
+    setAlert(msg, 'Sesión iniciada correctamente', 'success');
+    const loginCard = qs('#loginCard') || qs('#login-card');
+    const shell = qs('#mainTabs') || qs('#app-shell');
+    if (loginCard) loginCard.style.display = 'none';
+    if (shell) shell.style.display = 'block';
     await startApp();
-  } catch (_) {
-    /* handled by apiRequest */
+  } catch (err) {
+    if (err?.status === 404) {
+      setAlert(msg, 'No se encontró un participante con esa CI', 'error');
+    } else {
+      setAlert(msg, 'Ocurrió un error al iniciar sesión. Intenta más tarde.', 'error');
+    }
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -1276,12 +1312,18 @@ async function handleLogin(evt) {
   }
 }
 
+let bootstrapStarted = false;
+
 function bootstrap() {
+  if (bootstrapStarted) return;
+  bootstrapStarted = true;
   sessionManager.loadFromStorage();
   updateSessionUI();
-  const loginForm = qs('#login-form');
-  const loginInput = qs('#login-ci');
-  loginForm?.addEventListener('submit', handleLogin);
+  const loginForm = document.getElementById('frmLogin') || qs('#login-form');
+  const loginInput = document.getElementById('ciLogin') || qs('#login-ci');
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLogin);
+  }
   loginInput?.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') {
       ev.preventDefault();
@@ -1296,5 +1338,8 @@ function bootstrap() {
     startApp();
   }
 }
-
-document.addEventListener('DOMContentLoaded', bootstrap);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
