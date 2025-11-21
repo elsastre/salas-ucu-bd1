@@ -929,8 +929,10 @@ def create_reserva(payload: ReservaIn):
         if len(participantes) > capacidad:
             raise HTTPException(
                 status_code=409,
-                detail=f"La sala tiene capacidad {capacidad} y se intentan registrar "
-                       f"{len(participantes)} participantes.",
+                detail=(
+                    f"La sala {payload.nombre_sala} en {payload.edificio} tiene capacidad {capacidad}. "
+                    f"Cantidad solicitada: {len(participantes)}."
+                ),
             )
 
         # 7) Reglas de negocio por persona (solo si la reserva será ACTIVA)
@@ -1348,40 +1350,55 @@ def limpiar_smoke(payload: LimpiarSmokeIn):
         participantes = tuple(sorted(set(payload.participantes)))
 
         reserva_ids: list[int] = []
-        if fechas and participantes:
-            placeholders_fechas = ",".join(["%s"] * len(fechas))
+        if participantes:
             placeholders_cis = ",".join(["%s"] * len(participantes))
+            filtros: list[str] = [f"rp.ci_participante IN ({placeholders_cis})"]
+            params: list[Any] = [*participantes]
+
+            if fechas:
+                placeholders_fechas = ",".join(["%s"] * len(fechas))
+                filtros.append(f"r.fecha IN ({placeholders_fechas})")
+                params.extend(fechas)
+
+            where_clause = " AND ".join(filtros)
             cur.execute(
                 f"""
                 SELECT DISTINCT r.id_reserva
                 FROM reserva r
                 JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
-                WHERE r.fecha IN ({placeholders_fechas})
-                  AND rp.ci_participante IN ({placeholders_cis})
+                WHERE {where_clause}
                 """,
-                (*fechas, *participantes),
+                tuple(params),
             )
             reserva_ids = [row[0] for row in cur.fetchall()]
 
         if reserva_ids:
             placeholders_ids = ",".join(["%s"] * len(reserva_ids))
+            placeholders_cis = ",".join(["%s"] * len(participantes)) if participantes else ""
+
             cur.execute(
-                f"DELETE FROM reserva_participante WHERE id_reserva IN ({placeholders_ids})",
-                tuple(reserva_ids),
+                f"DELETE FROM reserva_participante WHERE id_reserva IN ({placeholders_ids})"
+                + (" AND ci_participante IN (" + placeholders_cis + ")" if participantes else ""),
+                tuple(reserva_ids + list(participantes)),
             )
+
             cur.execute(
-                f"DELETE FROM reserva WHERE id_reserva IN ({placeholders_ids})",
+                f"""
+                DELETE FROM reserva
+                WHERE id_reserva IN ({placeholders_ids})
+                  AND NOT EXISTS (
+                        SELECT 1 FROM reserva_participante rp
+                        WHERE rp.id_reserva = reserva.id_reserva
+                    )
+                """,
                 tuple(reserva_ids),
             )
 
-        if participantes and fechas:
+        if participantes:
+            placeholders_cis = ",".join(["%s"] * len(participantes))
             cur.execute(
-                f"""
-                DELETE FROM sancion_participante
-                WHERE ci_participante IN ({','.join(['%s']*len(participantes))})
-                  AND fecha_inicio IN ({','.join(['%s']*len(fechas))})
-                """,
-                (*participantes, *fechas),
+                f"DELETE FROM sancion_participante WHERE ci_participante IN ({placeholders_cis})",
+                participantes,
             )
 
         conn.commit()
