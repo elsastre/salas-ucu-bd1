@@ -2,6 +2,9 @@ const apiBase = '';
 const qs = (sel) => document.querySelector(sel);
 const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
+const toastHostId = 'toast-container';
+let toastTimer = null;
+
 const ALLOWED_ESTADOS = ['activa', 'cancelada', 'sin_asistencia', 'finalizada'];
 const CI_REGEX = /^\d{1,2}\.?\d{3}\.?\d{3}-?\d$/;
 const NAME_REGEX = /[a-zA-ZÁÉÍÓÚÜÑáéíóúüñ]/;
@@ -10,6 +13,15 @@ const state = {
   edificios: [],
   turnos: [],
 };
+
+function requestSubmit(form) {
+  if (!form) return;
+  if (typeof form.requestSubmit === 'function') {
+    form.requestSubmit();
+  } else {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  }
+}
 
 const sessionManager = {
   currentUser: null,
@@ -59,6 +71,22 @@ function setAlert(el, message, type = '') {
   if (!el) return;
   el.textContent = message || '';
   el.className = `alert${type ? ` ${type}` : ''}`;
+  if (type === 'error' && message) showToast(message, 'error');
+}
+
+function showToast(message, tone = 'info') {
+  const host = qs(`#${toastHostId}`);
+  if (!host || !message) return;
+  const toast = document.createElement('div');
+  toast.className = `toast ${tone}`;
+  toast.textContent = message;
+  host.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
 }
 
 async function apiRequest(method, url, body, msgEl) {
@@ -157,6 +185,8 @@ function tablePlaceholder(tbody, text = 'Sin datos') {
 
 const navigation = (() => {
   function show(targetId) {
+    const tab = qsa('.tab').find((t) => t.dataset.target === targetId);
+    if (tab?.disabled) return;
     qsa('.panel').forEach((p) => p.classList.remove('visible'));
     qs(`#${targetId}`)?.classList.add('visible');
     qsa('.tab').forEach((t) => t.classList.toggle('active', t.dataset.target === targetId));
@@ -234,7 +264,7 @@ const salasUI = (() => {
       tr.innerHTML = `
         <td>${s.edificio}</td>
         <td>${s.nombre_sala}</td>
-        <td>${s.capacidad}</td>
+        <td class="numeric">${s.capacidad}</td>
         <td><span class="badge">${s.tipo_sala}</span></td>
         <td>${actions}</td>`;
       tbody.appendChild(tr);
@@ -483,7 +513,7 @@ const turnosUI = (() => {
           </div>`
         : '<span class="muted">Solo administradores</span>';
       tr.innerHTML = `
-        <td>${t.id_turno}</td>
+        <td class="numeric">${t.id_turno}</td>
         <td>${t.hora_inicio}</td>
         <td>${t.hora_fin}</td>
         <td>${actions}</td>`;
@@ -587,10 +617,10 @@ const reservasUI = (() => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${r.id_reserva}</td>
+        <td class="numeric">${r.id_reserva}</td>
         <td>${r.edificio} · ${r.nombre_sala}</td>
         <td>${r.fecha}</td>
-        <td>${r.id_turno}</td>
+        <td class="numeric">${r.id_turno}</td>
         <td><span class="badge ${r.estado === 'activa' ? 'success' : ''}">${r.estado}</span></td>
         <td>${participantes.join(', ') || '—'}</td>
         <td>
@@ -1116,14 +1146,67 @@ function updateSessionUI() {
   const loginCard = qs('#login-card');
   const sessionCard = qs('#session-card');
   const info = qs('#session-info');
+  const tags = qs('#session-tags');
+  const loginInput = qs('#login-ci');
   const hasUser = !!sessionManager.currentUser;
+  const isAdmin = sessionManager.isAdmin();
+  document.body.classList.toggle('has-session', hasUser);
+  document.body.classList.toggle('is-admin', isAdmin);
   if (shell) shell.style.display = hasUser ? 'block' : 'none';
   if (loginCard) loginCard.style.display = hasUser ? 'none' : 'block';
   if (sessionCard) sessionCard.style.display = hasUser ? 'flex' : 'none';
+  if (!hasUser && loginInput) loginInput.focus();
   if (info) {
-    info.textContent = hasUser
-      ? `Sesión: ${sessionManager.currentUser.nombre} ${sessionManager.currentUser.apellido} (${sessionManager.currentUser.tipo_participante}${sessionManager.isAdmin() ? ', admin' : ''})`
-      : 'Sin sesión activa.';
+    if (hasUser) {
+      const u = sessionManager.currentUser;
+      info.innerHTML = `
+        <div class="session-name">${u.nombre} ${u.apellido}</div>
+        <div class="session-meta">CI ${u.ci}</div>
+      `;
+    } else {
+      info.textContent = 'Sin sesión activa.';
+    }
+  }
+  if (tags) {
+    tags.innerHTML = '';
+    if (hasUser) {
+      const u = sessionManager.currentUser;
+      const role = document.createElement('span');
+      role.className = 'badge role';
+      role.textContent = u.tipo_participante;
+      tags.appendChild(role);
+      if (isAdmin) {
+        const admin = document.createElement('span');
+        admin.className = 'badge role admin';
+        admin.textContent = 'admin';
+        tags.appendChild(admin);
+      }
+    }
+  }
+  applyRoleGuards();
+}
+
+function applyRoleGuards() {
+  const isAdmin = sessionManager.isAdmin();
+  qsa('[data-role="admin"]').forEach((el) => {
+    if (el.tagName === 'BUTTON') {
+      el.disabled = !isAdmin;
+      el.classList.toggle('tab-disabled', !isAdmin);
+      el.style.display = isAdmin ? '' : 'none';
+    } else {
+      el.classList.toggle('locked', !isAdmin);
+    }
+  });
+
+  qsa('.panel[data-role="admin"]').forEach((panel) => {
+    panel.classList.toggle('restricted', !isAdmin);
+  });
+
+  const activeTab = qs('.tab.active');
+  const visibleTabs = qsa('.tab').filter((t) => !t.disabled && t.style.display !== 'none');
+  if (!visibleTabs.length) return;
+  if (!activeTab || activeTab.disabled || activeTab.style.display === 'none') {
+    navigation.show(visibleTabs[0].dataset.target);
   }
 }
 
@@ -1171,21 +1254,41 @@ async function startApp() {
 async function handleLogin(evt) {
   evt.preventDefault();
   const msg = qs('#login-msg');
+  const submitBtn = qs('#login-submit');
   setAlert(msg, '');
   const ci = validateCi(qs('#login-ci').value, msg);
   if (!ci) return;
   try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Ingresando...';
+    }
     const user = await apiRequest('POST', `${apiBase}/auth/login`, { ci }, msg);
     sessionManager.save(user);
     setAlert(msg, 'Sesión iniciada', 'success');
     await startApp();
-  } catch (_) {}
+  } catch (_) {
+    /* handled by apiRequest */
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Entrar';
+    }
+  }
 }
 
 function bootstrap() {
   sessionManager.loadFromStorage();
   updateSessionUI();
-  qs('#login-form').addEventListener('submit', handleLogin);
+  const loginForm = qs('#login-form');
+  const loginInput = qs('#login-ci');
+  loginForm?.addEventListener('submit', handleLogin);
+  loginInput?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      requestSubmit(loginForm);
+    }
+  });
   qs('#logout-btn').addEventListener('click', () => {
     sessionManager.clear();
     updateSessionUI();
