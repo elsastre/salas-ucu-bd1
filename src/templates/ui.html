@@ -37,9 +37,61 @@
         </section>
 
         <section>
+            <h2>Turnos</h2>
+            <div class="controls">
+                <button id="btn-turnos">Listar turnos</button>
+                <label>Id turno: <input type="number" id="turno-id" min="0" /></label>
+                <button id="btn-turno-detalle">Buscar</button>
+            </div>
+            <ul id="lista-turnos"></ul>
+            <div id="turno-detalle"></div>
+        </section>
+
+        <section>
+            <h2>Participantes</h2>
+            <div class="controls">
+                <button id="btn-participantes">Listar participantes</button>
+                <label>CI: <input type="text" id="participante-ci" placeholder="Ej: 4.123.456-7" /></label>
+                <button id="btn-participante-detalle">Buscar</button>
+            </div>
+            <ul id="lista-participantes"></ul>
+            <div id="participante-detalle"></div>
+
+            <h3>Crear participante</h3>
+            <form id="form-participante">
+                <label>CI: <input type="text" id="nuevo-ci" required /></label>
+                <label>Nombre: <input type="text" id="nuevo-nombre" required /></label>
+                <label>Apellido: <input type="text" id="nuevo-apellido" required /></label>
+                <label>Email: <input type="email" id="nuevo-email" required /></label>
+                <button type="submit">Crear</button>
+            </form>
+            <div id="participante-msg"></div>
+        </section>
+
+        <section>
             <h2>Reservas</h2>
             <button id="btn-reservas">Actualizar</button>
             <ul id="lista-reservas"></ul>
+
+            <h3>Crear reserva</h3>
+            <form id="form-reserva">
+                <label>Edificio: <input type="text" id="reserva-edificio" required placeholder="Ej: B" /></label>
+                <label>Sala: <input type="text" id="reserva-sala" required placeholder="Ej: 103" /></label>
+                <label>Fecha: <input type="date" id="reserva-fecha" required /></label>
+                <label>Id turno: <input type="number" id="reserva-turno" required min="0" /></label>
+                <label>Participantes (CI, separadas por coma): <input type="text" id="reserva-participantes" required placeholder="12345678,23456789" /></label>
+                <label>Estado (opcional): <input type="text" id="reserva-estado" placeholder="activa" /></label>
+                <button type="submit">Crear reserva</button>
+            </form>
+            <div id="reserva-msg"></div>
+
+            <h3>Registrar asistencia</h3>
+            <form id="form-asistencia">
+                <label>ID reserva: <input type="number" id="asistencia-id" required min="0" /></label>
+                <label>CI presentes (separadas por coma, opcional): <input type="text" id="asistencia-presentes" placeholder="12345678,23456789" /></label>
+                <button type="submit">Registrar asistencia</button>
+            </form>
+            <div id="asistencia-msg"></div>
         </section>
     </main>
 
