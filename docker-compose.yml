@@ -1,4 +1,4 @@
-﻿services:
+services:
   db:
     image: mysql:8.0
     environment:
@@ -23,6 +23,21 @@
     depends_on:
       db:
         condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: salas_db
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 volumes:
   db_data:

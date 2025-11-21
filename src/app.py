@@ -1,10 +1,17 @@
-﻿from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from typing import List, Literal, Any
 import os, mysql.connector
 from datetime import timedelta, date
+from pathlib import Path as FilePath
 
 app = FastAPI(title="UCU Salas - BD1", version="0.3.0")
+
+BASE_DIR = FilePath(__file__).parent
+UI_TEMPLATE = BASE_DIR / "templates" / "ui.html"
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 # --------- DB ---------
 def get_conn():
@@ -58,6 +65,13 @@ def _row_to_turno(r):
         "hora_inicio": _fmt_time(r["hora_inicio"]),
         "hora_fin": _fmt_time(r["hora_fin"]),
     }
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/ui", response_class=HTMLResponse)
+def render_ui():
+    """Interfaz mínima en HTML que consume la API."""
+    return HTMLResponse(content=UI_TEMPLATE.read_text(encoding="utf-8"))
 
 # --------- MODELOS ---------
 class TurnoIn(BaseModel):
