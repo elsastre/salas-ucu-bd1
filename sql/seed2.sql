@@ -14,7 +14,9 @@ INSERT IGNORE INTO programa_academico (nombre_programa, id_facultad, tipo) VALUE
 
 INSERT IGNORE INTO participante (ci, nombre, apellido, email, tipo_participante) VALUES
   ('41234567', 'Matihas', 'Sastre', 'matihas.sastre@ucu.edu.uy', 'estudiante'),
-  ('59876543', 'Ada', 'Lovelace', 'ada@ucu.edu.uy', 'docente');
+  ('59876543', 'Ada', 'Lovelace', 'ada@ucu.edu.uy', 'docente'),
+  ('43333333', 'Beto', 'Prueba', 'beto.prueba@ucu.edu.uy', 'estudiante'),
+  ('44444444', 'Caro', 'Prueba', 'caro.prueba@ucu.edu.uy', 'estudiante');
 
 INSERT IGNORE INTO participante_programa_academico (ci_participante, nombre_programa, rol) VALUES
   ('41234567', 'Ing. en IA y Datos', 'alumno'),
@@ -25,7 +27,8 @@ INSERT IGNORE INTO sala (nombre_sala, edificio, capacidad, tipo_sala) VALUES
   ('Sala 102', 'Sede Central', 10, 'libre'),
   ('Sala 201 Posgrado', 'Sede Central', 8, 'posgrado'),
   ('Sala 301 Docente', 'Sede Central', 6, 'docente'),
-  ('Sala P1',  'Campus Pocitos', 8, 'posgrado');
+  ('Sala P1',  'Campus Pocitos', 8, 'posgrado'),
+  ('Sala Mini', 'Sede Central', 2, 'libre');
 
 INSERT IGNORE INTO turno (id_turno, hora_inicio, hora_fin) VALUES
   (8,  '08:00:00', '09:00:00'),

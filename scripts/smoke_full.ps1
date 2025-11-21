@@ -7,19 +7,22 @@ $ciAlumno  = "41234567"
 $ciDocente = "59876543"
 $ciNuevo   = "40123456"
 $ciSanc    = "42222222"
+$ciCapA    = "43333333"
+$ciCapB    = "44444444"
 
 $fechasNegocio = @(
     "2030-01-10", "2030-01-11", "2030-01-12",
     "2030-02-12", "2030-02-13", "2030-02-14", "2030-02-15",
-    "2030-03-01", "2030-03-02"
+    "2030-03-01", "2030-03-02",
+    "2030-04-01", "2030-04-10", "2030-04-11", "2030-04-12"
 )
-$fechasSancion = @("2030-03-01", "2030-05-01")
+$fechasSancion = @("2030-03-01", "2030-05-01", "2030-05-02")
 
 Write-Host "== Smoke FULL BD1 =="
 Write-Host "Base URL: $base"
 
 # Limpieza previa para idempotencia
-$bodyClean = @{ participantes = @($ciAlumno, $ciDocente, $ciNuevo, $ciSanc); fechas = ($fechasNegocio + $fechasSancion) } | ConvertTo-Json
+$bodyClean = @{ participantes = @($ciAlumno, $ciDocente, $ciNuevo, $ciSanc, $ciCapA, $ciCapB); fechas = ($fechasNegocio + $fechasSancion) } | ConvertTo-Json
 try {
     Write-Host "`n[0] Limpiando datos de smoke" -ForegroundColor Yellow
     Invoke-RestMethod "$base/admin/limpiar-smoke" -Method POST -ContentType "application/json" -Body $bodyClean | Out-Null
@@ -122,7 +125,25 @@ try {
     Write-Host "Reserva rechazada por sanción manual como se esperaba (ver mensaje)."; $_.ErrorDetails.Message
 }
 
-Write-Host "`n[5.5] DELETE sanción y luego DELETE participante sancionable"
+Write-Host "`n[5.5] Frontera de sanción (fin inclusivo en fecha_fin = $($fechasSancion[1]))"
+$bodyFinInclusive = @{ nombre_sala="Sala 101"; edificio="Sede Central"; fecha=$fechasSancion[1]; id_turno=15; participantes=@($ciSanc) } | ConvertTo-Json -Depth 5
+try {
+    Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyFinInclusive -ErrorAction Stop | Out-Null
+    Write-Host "¡¡OJO!! La reserva en el día final de sanción se aceptó y no debería (el rango es inclusivo)."
+} catch {
+    Write-Host "Reserva rechazada en el día final de sanción (fin inclusivo)."; $_.ErrorDetails.Message
+}
+
+Write-Host "`n[5.6] Día posterior a la sanción (debe PASAR si el rango terminó)"
+$bodyPostSanc = @{ nombre_sala="Sala 101"; edificio="Sede Central"; fecha=$fechasSancion[2]; id_turno=16; participantes=@($ciSanc) } | ConvertTo-Json -Depth 5
+try {
+    $postSanc = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyPostSanc -ErrorAction Stop
+    $postSanc
+} catch {
+    Write-Host "¡¡OJO!! No se pudo reservar al día siguiente del fin de sanción y debería ser posible."; $_.ErrorDetails.Message
+}
+
+Write-Host "`n[5.7] DELETE sanción y luego DELETE participante sancionable"
 try {
     irm "$base/sanciones/$ciSanc/$($fechasSancion[0])" -Method DELETE -ErrorAction Stop | Out-Null
 } catch {
