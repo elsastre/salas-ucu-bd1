@@ -3,8 +3,8 @@ Param(
 )
 
 $base      = $BaseUrl
-$ciAlumno  = "4.123.456-7"   # Matihas (grado)
-$ciDocente = "5.987.654-3"   # Ada (docente posgrado)
+$ciAlumno  = "41234567"   # Matihas (grado)
+$ciDocente = "59876543"   # Ada (docente posgrado)
 
 # Fechas pensadas para estar lejos de los seeds
 $fechaLibre = "2030-01-10"
@@ -12,7 +12,7 @@ $fechaSanc1 = "2030-01-11"
 $fechaSanc2 = "2030-01-12"
 
 $semFecha1 = "2030-02-12"   # martes
-$semFecha2 = "2030-02-13"   # miércoles
+$semFecha2 = "2030-02-13"   # miÃ©rcoles
 $semFecha3 = "2030-02-14"   # jueves
 $semFecha4 = "2030-02-15"   # viernes
 
@@ -25,8 +25,8 @@ irm "$base/turnos"    | Select-Object -First 5
 irm "$base/edificios"
 irm "$base/salas"
 
-# 2) Límite 2 horas/día (salas libres) + disponibilidad
-Write-Host "`n[2] Reglas diarias (2 horas/día en salas libres)"
+# 2) LÃ­mite 2 horas/dÃ­a (salas libres) + disponibilidad
+Write-Host "`n[2] Reglas diarias (2 horas/dÃ­a en salas libres)"
 
 $body1 = @{
     nombre_sala   = "Sala 101"
@@ -52,28 +52,28 @@ $body3 = @{
     participantes = @($ciAlumno)
 } | ConvertTo-Json -Depth 5
 
-Write-Host "`n[2.1] Primera reserva del día"
+Write-Host "`n[2.1] Primera reserva del dÃ­a"
 $resa1 = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body1
 $resa1
 
-Write-Host "`n[2.2] Segunda reserva del día"
+Write-Host "`n[2.2] Segunda reserva del dÃ­a"
 $resa2 = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body2
 $resa2
 
-Write-Host "`n[2.3] Tercera reserva del día (debería fallar por límite diario)"
+Write-Host "`n[2.3] Tercera reserva del dÃ­a (deberÃ­a fallar por lÃ­mite diario)"
 try {
     Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body3 -ErrorAction Stop
-    Write-Host "¡¡OJO!! La tercera reserva se creó y NO debería."
+    Write-Host "Â¡Â¡OJO!! La tercera reserva se creÃ³ y NO deberÃ­a."
 } catch {
-    Write-Host "Tercera reserva rechazada como se esperaba (límite diario)."
+    Write-Host "Tercera reserva rechazada como se esperaba (lÃ­mite diario)."
 }
 
 Write-Host "`n[2.4] /disponibilidad para esa sala y fecha"
 irm "$base/disponibilidad?fecha=$fechaLibre&edificio=Sede%20Central&nombre_sala=Sala%20101" |
     Select-Object -First 5
 
-# 3) Asistencia + sanción
-Write-Host "`n[3] Asistencia y sanción automática"
+# 3) Asistencia + sanciÃ³n
+Write-Host "`n[3] Asistencia y sanciÃ³n automÃ¡tica"
 
 $bodyS1 = @{
     nombre_sala   = "Sala 101"
@@ -84,7 +84,7 @@ $bodyS1 = @{
 } | ConvertTo-Json -Depth 5
 
 $resaS1 = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyS1
-Write-Host "Reserva para sanción:"
+Write-Host "Reserva para sanciÃ³n:"
 $resaS1
 
 $asisBody = @{
@@ -104,16 +104,16 @@ $bodyS2 = @{
     participantes = @($ciAlumno)
 } | ConvertTo-Json -Depth 5
 
-Write-Host "`nIntentar reservar dentro del período de sanción (debería fallar)..."
+Write-Host "`nIntentar reservar dentro del perÃ­odo de sanciÃ³n (deberÃ­a fallar)..."
 try {
     Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyS2 -ErrorAction Stop
-    Write-Host "¡¡OJO!! La reserva se creó y NO debería si la sanción se aplica."
+    Write-Host "Â¡Â¡OJO!! La reserva se creÃ³ y NO deberÃ­a si la sanciÃ³n se aplica."
 } catch {
-    Write-Host "Reserva rechazada por sanción (esperado)."
+    Write-Host "Reserva rechazada por sanciÃ³n (esperado)."
 }
 
-# 4) Límite semanal (3 reservas activas/semana)
-Write-Host "`n[4] Límite semanal (3 reservas activas/semana)"
+# 4) LÃ­mite semanal (3 reservas activas/semana)
+Write-Host "`n[4] LÃ­mite semanal (3 reservas activas/semana)"
 
 function New-Reserva {
     param(
@@ -131,17 +131,17 @@ function New-Reserva {
     Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body -ErrorAction Stop
 }
 
-Write-Host "`n[4.1] Tres reservas en la misma semana (deberían ser aceptadas)"
+Write-Host "`n[4.1] Tres reservas en la misma semana (deberÃ­an ser aceptadas)"
 try {
     $sr1 = New-Reserva -fecha $semFecha1 -turno 8
     $sr2 = New-Reserva -fecha $semFecha2 -turno 9
     $sr3 = New-Reserva -fecha $semFecha3 -turno 10
     $sr1; $sr2; $sr3
 } catch {
-    Write-Host "¡¡OJO!! Alguna de las 3 primeras reservas falló y no debería."
+    Write-Host "Â¡Â¡OJO!! Alguna de las 3 primeras reservas fallÃ³ y no deberÃ­a."
 }
 
-Write-Host "`n[4.2] Cuarta reserva en la misma semana (debería fallar)"
+Write-Host "`n[4.2] Cuarta reserva en la misma semana (deberÃ­a fallar)"
 $body4 = @{
     nombre_sala   = "Sala 101"
     edificio      = "Sede Central"
@@ -152,9 +152,9 @@ $body4 = @{
 
 try {
     Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $body4 -ErrorAction Stop
-    Write-Host "¡¡OJO!! La 4ª reserva se creó y NO debería si la regla semanal está activa."
+    Write-Host "Â¡Â¡OJO!! La 4Âª reserva se creÃ³ y NO deberÃ­a si la regla semanal estÃ¡ activa."
 } catch {
-    Write-Host "4ª reserva rechazada como se esperaba (límite semanal)."
+    Write-Host "4Âª reserva rechazada como se esperaba (lÃ­mite semanal)."
 }
 
 Write-Host "`n== Smoke negocio BD1 terminado =="
