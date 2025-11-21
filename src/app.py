@@ -4,7 +4,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from typing import List, Literal, Any
 import os, mysql.connector, re
-from mysql.connector import errorcode
 from datetime import timedelta, date
 from pathlib import Path as FilePath
 
@@ -56,21 +55,15 @@ def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
     cur = conn.cursor()
     try:
         cur.execute("SHOW COLUMNS FROM participante LIKE 'tipo_participante'")
-        column_exists = cur.fetchone() is not None
-        if not column_exists:
-            try:
-                cur.execute(
-                    """
-                    ALTER TABLE participante
-                    ADD COLUMN tipo_participante
-                    ENUM('estudiante','docente','posgrado')
-                    NOT NULL DEFAULT 'estudiante'
-                    """
-                )
-            except mysql.connector.Error as e:
-                # Si otro proceso ya la agregó entre el SHOW y el ALTER
-                if e.errno != errorcode.ER_DUP_FIELDNAME:
-                    raise
+        if cur.fetchone() is None:
+            cur.execute(
+                """
+                ALTER TABLE participante
+                ADD COLUMN IF NOT EXISTS tipo_participante
+                ENUM('estudiante','docente','posgrado')
+                NOT NULL DEFAULT 'estudiante'
+                """
+            )
         _MIGRATIONS_APPLIED = True
     except mysql.connector.Error as e:
         raise HTTPException(
