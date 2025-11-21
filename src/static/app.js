@@ -1147,7 +1147,6 @@ function updateSessionUI() {
   const sessionCard = qs('#session-card');
   const info = qs('#session-info');
   const tags = qs('#session-tags');
-  const loginInput = qs('#login-ci');
   const hasUser = !!sessionManager.currentUser;
   const isAdmin = sessionManager.isAdmin();
   document.body.classList.toggle('has-session', hasUser);
