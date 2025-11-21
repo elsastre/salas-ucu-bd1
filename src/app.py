@@ -155,6 +155,36 @@ class ReportUsoPorRol(BaseModel):
     tipo_programa: str
     total_reservas: int
 
+
+# --------- MODELOS SANCIONES ---------
+class SancionBase(BaseModel):
+    ci_participante: str
+    fecha_inicio: date
+    fecha_fin: date
+
+    @field_validator("fecha_fin")
+    @classmethod
+    def _val_fechas(cls, v, values):
+        inicio = values.data.get("fecha_inicio")
+        if inicio and v <= inicio:
+            raise ValueError("fecha_fin debe ser posterior a fecha_inicio")
+        return v
+
+
+class SancionCreate(SancionBase):
+    pass
+
+
+class SancionUpdate(BaseModel):
+    fecha_fin: date
+
+    @field_validator("fecha_fin")
+    @classmethod
+    def _val_fin(cls, v):
+        if not v:
+            raise ValueError("fecha_fin es requerida")
+        return v
+
 # --------- HEALTH ---------
 @app.get("/health")
 def health():
@@ -266,6 +296,7 @@ class ReservaOut(BaseModel):
     fecha: date
     id_turno: int
     estado: str
+    participantes: str | None = None
 
 @app.get("/reservas", response_model=List[ReservaOut])
 def list_reservas(
@@ -299,17 +330,20 @@ def list_reservas(
             params.append(id_turno)
 
         sql = """
-            SELECT id_reserva,
-                   nombre_sala,
-                   edificio,
-                   fecha,
-                   id_turno,
-                   estado
-            FROM reserva
+            SELECT r.id_reserva,
+                   r.nombre_sala,
+                   r.edificio,
+                   r.fecha,
+                   r.id_turno,
+                   r.estado,
+                   GROUP_CONCAT(rp.ci_participante ORDER BY rp.ci_participante) AS participantes
+            FROM reserva r
+            LEFT JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
         """
         if conds:
             sql += " WHERE " + " AND ".join(conds)
-        sql += " ORDER BY fecha, edificio, nombre_sala, id_turno"
+        sql += " GROUP BY r.id_reserva, r.nombre_sala, r.edificio, r.fecha, r.id_turno, r.estado"
+        sql += " ORDER BY r.fecha, r.edificio, r.nombre_sala, r.id_turno"
 
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
@@ -1271,6 +1305,152 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
             status_code=500,
             detail=f"Error eliminando participante: {e}",
         )
+    finally:
+        conn.close()
+
+# ==========================
+#  SANCIONES
+# ==========================
+
+
+@app.get("/sanciones", response_model=List[SancionBase])
+def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI")):
+    """
+    Devuelve sanciones vigentes o históricas de participantes.
+    """
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        if ci:
+            cur.execute(
+                """
+                SELECT ci_participante, fecha_inicio, fecha_fin
+                FROM sancion_participante
+                WHERE ci_participante = %s
+                ORDER BY fecha_inicio DESC
+                """,
+                (ci,),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT ci_participante, fecha_inicio, fecha_fin
+                FROM sancion_participante
+                ORDER BY fecha_inicio DESC
+                """
+            )
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error consultando sanciones: {e}")
+    finally:
+        conn.close()
+
+
+@app.post("/sanciones", response_model=SancionBase, status_code=201)
+def crear_sancion(payload: SancionCreate):
+    """Crea una sanción manual para un participante."""
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
+            VALUES (%s, %s, %s)
+            """,
+            (payload.ci_participante, payload.fecha_inicio, payload.fecha_fin),
+        )
+        conn.commit()
+        return payload
+    except mysql.connector.Error as e:
+        if e.errno == 1452:
+            raise HTTPException(
+                status_code=404,
+                detail="Participante no encontrado para sanción",
+            )
+        if e.errno == 1062:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe una sanción con la misma fecha de inicio para este participante",
+            )
+        raise HTTPException(status_code=500, detail=f"Error creando sanción: {e}")
+    finally:
+        conn.close()
+
+
+@app.put("/sanciones/{ci}/{fecha_inicio}", response_model=SancionBase)
+def actualizar_sancion(
+    ci: str = Path(..., description="CI del participante"),
+    fecha_inicio: date = Path(..., description="Fecha de inicio original"),
+    payload: SancionUpdate = ...,
+):
+    """Actualiza la fecha de fin de una sanción existente."""
+
+    if payload.fecha_fin <= fecha_inicio:
+        raise HTTPException(status_code=422, detail="fecha_fin debe ser posterior a fecha_inicio")
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+
+        cur.execute(
+            """
+            SELECT ci_participante, fecha_inicio, fecha_fin
+            FROM sancion_participante
+            WHERE ci_participante = %s AND fecha_inicio = %s
+            """,
+            (ci, fecha_inicio),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Sanción no encontrada")
+
+        cur.execute(
+            """
+            UPDATE sancion_participante
+            SET fecha_fin = %s
+            WHERE ci_participante = %s AND fecha_inicio = %s
+            """,
+            (payload.fecha_fin, ci, fecha_inicio),
+        )
+        conn.commit()
+
+        return {
+            "ci_participante": ci,
+            "fecha_inicio": fecha_inicio,
+            "fecha_fin": payload.fecha_fin,
+        }
+    except HTTPException:
+        raise
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error actualizando sanción: {e}")
+    finally:
+        conn.close()
+
+
+@app.delete("/sanciones/{ci}/{fecha_inicio}", status_code=204)
+def eliminar_sancion(
+    ci: str = Path(..., description="CI del participante"),
+    fecha_inicio: date = Path(..., description="Fecha de inicio de la sanción"),
+):
+    """Elimina una sanción manual."""
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM sancion_participante WHERE ci_participante = %s AND fecha_inicio = %s",
+            (ci, fecha_inicio),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Sanción no encontrada")
+        return
+    except HTTPException:
+        raise
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error eliminando sanción: {e}")
     finally:
         conn.close()
 
