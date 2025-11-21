@@ -51,8 +51,8 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Listado</h3>
-                        <p class="muted">Incluye tipo de sala y capacidad. Puedes editar o eliminar cada registro.</p>
-                    </div>
+                    <p class="muted">Incluye tipo de sala y capacidad. Puedes editar o eliminar cada registro.</p>
+                </div>
                     <div class="table-wrapper">
                         <table>
                             <thead>
@@ -66,7 +66,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Crear / Editar sala</h3>
-                        <p class="muted">Selecciona desde la tabla para editar. Los campos edificio y nombre no cambian en edición.</p>
+                        <p class="muted">Selecciona desde la tabla para editar. Puedes renombrar la sala; el edificio se mantiene.</p>
                     </div>
                     <form id="salas-form" class="form-grid">
                         <label>Edificio
@@ -118,7 +118,7 @@
                     <div class="table-wrapper">
                         <table>
                             <thead>
-                                <tr><th>CI</th><th>Nombre</th><th>Email</th><th>Acciones</th></tr>
+                                <tr><th>CI</th><th>Nombre</th><th>Tipo</th><th>Email</th><th>Acciones</th></tr>
                             </thead>
                             <tbody id="participantes-table"></tbody>
                         </table>
@@ -128,7 +128,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Crear / Editar participante</h3>
-                        <p class="muted">Completa todos los campos. El email valida formato básico.</p>
+                        <p class="muted">Completa todos los campos. CI debe tener 7 u 8 dígitos (puedes usar puntos/guiones), y nombre/apellido requieren letras.</p>
                     </div>
                     <form id="participantes-form" class="form-grid">
                         <label>CI
@@ -139,6 +139,13 @@
                         </label>
                         <label>Apellido
                             <input type="text" id="part-apellido" required />
+                        </label>
+                        <label>Tipo de participante
+                            <select id="part-tipo" required>
+                                <option value="estudiante">Estudiante</option>
+                                <option value="docente">Docente</option>
+                                <option value="posgrado">Posgrado</option>
+                            </select>
                         </label>
                         <label>Email
                             <input type="email" id="part-email" required />
@@ -244,7 +251,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Crear reserva</h3>
-                        <p class="muted">Ingresa todos los participantes (CIs separadas por coma). Estados válidos: activa, cancelada, sin_asistencia, finalizada.</p>
+                        <p class="muted">Ingresa todos los participantes (CIs separadas por coma). Usa CIs de 7-8 dígitos y estados válidos: activa, cancelada, sin_asistencia, finalizada.</p>
                     </div>
                     <form id="reservas-form" class="form-grid">
                         <label>Fecha
@@ -276,7 +283,7 @@
                                 <li>Límite 2 horas diarias y 3 reservas activas semanales en salas de uso libre.</li>
                                 <li>Docentes y posgrado no tienen límite en sus salas exclusivas.</li>
                                 <li>No exceder la capacidad de la sala.</li>
-                                <li>Si nadie asiste, todos quedan sancionados por 2 meses.</li>
+                                <li>Si nadie asiste y se decide sancionar, todos quedan sancionados por 2 meses.</li>
                             </ul>
                         </div>
                         <div class="form-actions">
@@ -290,7 +297,7 @@
 
                     <div class="card-header">
                         <h3>Registrar asistencia</h3>
-                        <p class="muted">Si no marcas presentes, se generarán sanciones automáticas.</p>
+                        <p class="muted">CIs presentes separadas por coma. Puedes decidir si sancionar o no a los ausentes.</p>
                     </div>
                     <form id="asistencia-form" class="form-grid">
                         <label>ID reserva
@@ -298,6 +305,9 @@
                         </label>
                         <label>CI presentes (coma)
                             <textarea id="asis-presentes" rows="2" placeholder="12345678,23456789"></textarea>
+                        </label>
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="asis-sancionar" checked /> Sancionar ausentes (2 meses)
                         </label>
                         <div class="form-actions">
                             <button type="submit" class="btn secondary">Registrar asistencia</button>
@@ -349,7 +359,7 @@
                 <div>
                     <p class="eyebrow">Sanciones</p>
                     <h2>ABM de sanciones</h2>
-                    <p class="help">Las sanciones también se generan automáticamente cuando nadie asiste a una reserva.</p>
+                    <p class="help">Las sanciones también se generan automáticamente cuando nadie asiste a una reserva. CIs deben cumplir el formato de 7-8 dígitos.</p>
                 </div>
                 <div class="filters">
                     <label>Filtrar por CI
@@ -373,7 +383,7 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Crear / Editar sanción</h3>
-                        <p class="muted">Usa fechas en formato YYYY-MM-DD. Selecciona desde la tabla para editar fecha fin.</p>
+                        <p class="muted">Usa fechas en formato YYYY-MM-DD y CI de 7-8 dígitos. Selecciona desde la tabla para editar fecha fin.</p>
                     </div>
                     <form id="sanciones-form" class="form-grid">
                         <label>CI participante
