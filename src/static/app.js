@@ -3,6 +3,8 @@ const qs = (sel) => document.querySelector(sel);
 const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
 const ALLOWED_ESTADOS = ['activa', 'cancelada', 'sin_asistencia', 'finalizada'];
+const CI_REGEX = /^\d{1,2}\.?\d{3}\.?\d{3}-?\d$/;
+const NAME_REGEX = /[a-zA-ZÁÉÍÓÚÜÑáéíóúüñ]/;
 
 const state = {
   edificios: [],
@@ -42,6 +44,45 @@ function parseCiList(value) {
     .split(',')
     .map((c) => c.trim())
     .filter(Boolean);
+}
+
+function normalizeCi(ci) {
+  const digits = (ci || '').replace(/\D/g, '');
+  if (digits.length >= 7 && digits.length <= 8) return digits;
+  return null;
+}
+
+function validateCi(value, msgEl) {
+  if (!value) {
+    setAlert(msgEl, 'La CI es obligatoria', 'error');
+    return null;
+  }
+  const digits = normalizeCi(value);
+  if (!digits || !(CI_REGEX.test(value) || /^\d{7,8}$/.test(value))) {
+    setAlert(msgEl, 'Formato de CI inválido (usa 7 u 8 dígitos, con o sin puntos/guiones)', 'error');
+    return null;
+  }
+  return digits;
+}
+
+function validateCiList(raw, msgEl) {
+  const list = parseCiList(raw);
+  const normalized = [];
+  for (const ci of list) {
+    const n = validateCi(ci, msgEl);
+    if (!n) return null;
+    normalized.push(n);
+  }
+  return normalized;
+}
+
+function validateName(value, field, msgEl) {
+  const clean = (value || '').trim();
+  if (clean.length < 2 || !NAME_REGEX.test(clean)) {
+    setAlert(msgEl, `${field} debe tener al menos 2 caracteres con letras`, 'error');
+    return null;
+  }
+  return clean;
 }
 
 function fillSelect(select, options, { includeAll = false, allLabel = 'Todos' } = {}) {
@@ -168,13 +209,21 @@ const salasUI = (() => {
     if (!payload.edificio || !payload.nombre_sala) return;
 
     const msg = qs('#sala-form-msg');
+    setAlert(msg, '');
     const isEdit = Boolean(editing);
     const url = isEdit
       ? `${apiBase}/salas/${encodeURIComponent(editing.edificio)}/${encodeURIComponent(editing.nombre_sala)}`
       : `${apiBase}/salas`;
     const method = isEdit ? 'PUT' : 'POST';
     try {
-      await apiRequest(method, url, isEdit ? { capacidad: payload.capacidad, tipo_sala: payload.tipo_sala } : payload, msg);
+      await apiRequest(
+        method,
+        url,
+        isEdit
+          ? { nombre_sala: payload.nombre_sala, capacidad: payload.capacidad, tipo_sala: payload.tipo_sala }
+          : payload,
+        msg,
+      );
       setAlert(msg, isEdit ? 'Sala actualizada' : 'Sala creada', 'success');
       await list();
       resetForm();
@@ -192,7 +241,7 @@ const salasUI = (() => {
       qs('#sala-capacidad').value = btn.closest('tr').children[2].textContent;
       qs('#sala-tipo').value = btn.closest('tr').children[3].textContent.trim();
       qs('#sala-edificio').disabled = true;
-      qs('#sala-nombre').readOnly = true;
+      qs('#sala-nombre').readOnly = false;
     }
     if (action === 'delete') {
       if (!confirm(`¿Eliminar sala ${nombre} de ${edificio}?`)) return;
@@ -222,8 +271,11 @@ const participantesUI = (() => {
     const filtro = qs('#participantes-search').value.trim();
     const msg = qs('#participantes-msg');
     try {
+      setAlert(msg, '');
       if (filtro) {
-        const data = await apiRequest('GET', `${apiBase}/participantes/${encodeURIComponent(filtro)}`, null, msg);
+        const ci = validateCi(filtro, msg);
+        if (!ci) return;
+        const data = await apiRequest('GET', `${apiBase}/participantes/${encodeURIComponent(ci)}`, null, msg);
         render(Array.isArray(data) ? data : [data]);
       } else {
         const data = await apiRequest('GET', `${apiBase}/participantes`, null, msg);
@@ -241,6 +293,7 @@ const participantesUI = (() => {
       tr.innerHTML = `
         <td>${p.ci}</td>
         <td>${p.apellido}, ${p.nombre}</td>
+        <td><span class="badge neutral">${p.tipo_participante || '—'}</span></td>
         <td>${p.email}</td>
         <td>
           <div class="table-actions">
@@ -256,26 +309,34 @@ const participantesUI = (() => {
     editing = null;
     qs('#participantes-form').reset();
     qs('#part-ci').readOnly = false;
+    qs('#part-ci').value = '';
     setAlert(qs('#participantes-form-msg'), '');
   }
 
   async function submit(evt) {
     evt.preventDefault();
-    const payload = {
-      ci: qs('#part-ci').value.trim(),
-      nombre: qs('#part-nombre').value.trim(),
-      apellido: qs('#part-apellido').value.trim(),
-      email: qs('#part-email').value.trim(),
-    };
-    if (!payload.ci || !payload.email.includes('@')) {
-      return setAlert(qs('#participantes-form-msg'), 'Completa CI y email válido', 'error');
-    }
+    const msg = qs('#participantes-form-msg');
+    setAlert(msg, '');
+    const ciNorm = validateCi(qs('#part-ci').value.trim(), msg);
+    const nombre = validateName(qs('#part-nombre').value, 'Nombre', msg);
+    const apellido = validateName(qs('#part-apellido').value, 'Apellido', msg);
+    const email = (qs('#part-email').value || '').trim();
+    const tipo_participante = qs('#part-tipo').value;
+    if (!ciNorm || !nombre || !apellido) return;
+    if (!email.includes('@')) return setAlert(msg, 'Email inválido', 'error');
+
+    const payload = { ci: ciNorm, nombre, apellido, email, tipo_participante };
     const isEdit = Boolean(editing);
-    const url = isEdit ? `${apiBase}/participantes/${encodeURIComponent(payload.ci)}` : `${apiBase}/participantes`;
+    const url = isEdit ? `${apiBase}/participantes/${encodeURIComponent(editing)}` : `${apiBase}/participantes`;
     const method = isEdit ? 'PUT' : 'POST';
     try {
-      await apiRequest(method, url, isEdit ? { nombre: payload.nombre, apellido: payload.apellido, email: payload.email } : payload, qs('#participantes-form-msg'));
-      setAlert(qs('#participantes-form-msg'), isEdit ? 'Participante actualizado' : 'Participante creado', 'success');
+      await apiRequest(
+        method,
+        url,
+        isEdit ? { nombre, apellido, email, tipo_participante } : payload,
+        msg,
+      );
+      setAlert(msg, isEdit ? 'Participante actualizado' : 'Participante creado', 'success');
       await list();
       resetForm();
     } catch (_) {}
@@ -290,7 +351,8 @@ const participantesUI = (() => {
       qs('#part-ci').value = ci;
       qs('#part-nombre').value = row[1].textContent.split(', ')[1];
       qs('#part-apellido').value = row[1].textContent.split(', ')[0];
-      qs('#part-email').value = row[2].textContent;
+      qs('#part-tipo').value = row[2].textContent.trim();
+      qs('#part-email').value = row[3].textContent;
       qs('#part-ci').readOnly = true;
       editing = ci;
     }
@@ -448,20 +510,22 @@ const reservasUI = (() => {
 
   async function submit(evt) {
     evt.preventDefault();
+    const msg = qs('#reservas-form-msg');
+    setAlert(msg, '');
     const payload = {
       fecha: qs('#res-fecha').value,
       edificio: qs('#res-edificio').value,
       nombre_sala: qs('#res-sala').value,
       id_turno: Number(qs('#res-turno').value),
-      participantes: parseCiList(qs('#res-participantes').value),
+      participantes: validateCiList(qs('#res-participantes').value, msg),
       estado: normalizeEstado(qs('#res-estado').value),
     };
-    if (!payload.fecha || !payload.edificio || !payload.nombre_sala || !payload.id_turno || !payload.participantes.length) {
-      return setAlert(qs('#reservas-form-msg'), 'Completa todos los campos', 'error');
+    if (!payload.fecha || !payload.edificio || !payload.nombre_sala || !payload.id_turno || !payload.participantes) {
+      return;
     }
     try {
-      await apiRequest('POST', `${apiBase}/reservas`, payload, qs('#reservas-form-msg'));
-      setAlert(qs('#reservas-form-msg'), 'Reserva creada', 'success');
+      await apiRequest('POST', `${apiBase}/reservas`, payload, msg);
+      setAlert(msg, 'Reserva creada', 'success');
       await list();
       qs('#reservas-form').reset();
     } catch (_) {}
@@ -482,11 +546,18 @@ const reservasUI = (() => {
   async function registrarAsistencia(evt) {
     evt.preventDefault();
     const id = qs('#asis-id').value;
-    const presentes = parseCiList(qs('#asis-presentes').value);
+    const msg = qs('#asistencia-msg');
+    setAlert(msg, '');
+    const presentes = validateCiList(qs('#asis-presentes').value, msg) || [];
     if (!id) return;
     try {
-      await apiRequest('POST', `${apiBase}/reservas/${id}/asistencia`, { presentes }, qs('#asistencia-msg'));
-      setAlert(qs('#asistencia-msg'), 'Asistencia registrada', 'success');
+      await apiRequest(
+        'POST',
+        `${apiBase}/reservas/${id}/asistencia`,
+        { presentes, sancionar_ausentes: qs('#asis-sancionar').checked },
+        msg,
+      );
+      setAlert(msg, 'Asistencia registrada', 'success');
       await list();
     } catch (_) {}
   }
@@ -561,8 +632,15 @@ const sancionesUI = (() => {
 
   async function list() {
     const ci = qs('#sanciones-filtro-ci').value.trim();
-    const params = ci ? `?ci=${encodeURIComponent(ci)}` : '';
-    const data = await apiRequest('GET', `${apiBase}/sanciones${params}`, null, qs('#sanciones-msg'));
+    const msg = qs('#sanciones-msg');
+    setAlert(msg, '');
+    let params = '';
+    if (ci) {
+      const norm = validateCi(ci, msg);
+      if (!norm) return;
+      params = `?ci=${encodeURIComponent(norm)}`;
+    }
+    const data = await apiRequest('GET', `${apiBase}/sanciones${params}`, null, msg);
     render(data || []);
   }
 
@@ -599,14 +677,16 @@ const sancionesUI = (() => {
     const ci = qs('#sancion-ci').value.trim();
     const fecha_inicio = qs('#sancion-inicio').value;
     const fecha_fin = qs('#sancion-fin').value;
-    if (!ci || !fecha_inicio || !fecha_fin) return;
     const msg = qs('#sanciones-form-msg');
+    setAlert(msg, '');
+    const normCi = validateCi(ci, msg);
+    if (!normCi || !fecha_inicio || !fecha_fin) return;
     try {
       if (editing) {
-        await apiRequest('PUT', `${apiBase}/sanciones/${encodeURIComponent(ci)}/${fecha_inicio}`, { fecha_fin }, msg);
+        await apiRequest('PUT', `${apiBase}/sanciones/${encodeURIComponent(normCi)}/${fecha_inicio}`, { fecha_fin }, msg);
         setAlert(msg, 'Sanción actualizada', 'success');
       } else {
-        await apiRequest('POST', `${apiBase}/sanciones`, { ci_participante: ci, fecha_inicio, fecha_fin }, msg);
+        await apiRequest('POST', `${apiBase}/sanciones`, { ci_participante: normCi, fecha_inicio, fecha_fin }, msg);
         setAlert(msg, 'Sanción creada', 'success');
       }
       await list();
