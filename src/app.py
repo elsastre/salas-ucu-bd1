@@ -1346,21 +1346,43 @@ def limpiar_smoke(payload: LimpiarSmokeIn):
     try:
         cur = conn.cursor()
 
+        # Asegurar que la sala usada en las pruebas de capacidad exista aun si el
+        # volumen de datos proviene de una versión anterior sin ese seed.
+        cur.execute(
+            """
+            INSERT IGNORE INTO edificio (nombre_edificio, direccion, departamento)
+            VALUES (%s, %s, %s)
+            """,
+            ("Sede Central", "Av. 8 de Octubre 2738", "Montevideo"),
+        )
+        cur.execute(
+            """
+            INSERT IGNORE INTO sala (nombre_sala, edificio, capacidad, tipo_sala)
+            VALUES (%s, %s, %s, %s)
+            """,
+            ("Sala Mini", "Sede Central", 2, "libre"),
+        )
+
         fechas = tuple(sorted(set(payload.fechas)))
         participantes = tuple(sorted(set(payload.participantes)))
 
-        reserva_ids: list[int] = []
+        # 1) Identificar reservas asociadas a participantes/fechas solicitadas.
+        filtros_reserva: list[str] = []
+        params_reserva: list[Any] = []
+
         if participantes:
             placeholders_cis = ",".join(["%s"] * len(participantes))
-            filtros: list[str] = [f"rp.ci_participante IN ({placeholders_cis})"]
-            params: list[Any] = [*participantes]
+            filtros_reserva.append(f"rp.ci_participante IN ({placeholders_cis})")
+            params_reserva.extend(participantes)
 
-            if fechas:
-                placeholders_fechas = ",".join(["%s"] * len(fechas))
-                filtros.append(f"r.fecha IN ({placeholders_fechas})")
-                params.extend(fechas)
+        if fechas:
+            placeholders_fechas = ",".join(["%s"] * len(fechas))
+            filtros_reserva.append(f"r.fecha IN ({placeholders_fechas})")
+            params_reserva.extend(fechas)
 
-            where_clause = " AND ".join(filtros)
+        reserva_ids: list[int] = []
+        if filtros_reserva:
+            where_clause = " AND ".join(filtros_reserva)
             cur.execute(
                 f"""
                 SELECT DISTINCT r.id_reserva
@@ -1368,32 +1390,49 @@ def limpiar_smoke(payload: LimpiarSmokeIn):
                 JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
                 WHERE {where_clause}
                 """,
-                tuple(params),
+                tuple(params_reserva),
             )
             reserva_ids = [row[0] for row in cur.fetchall()]
 
+        # 2) Borrar reservas_participantes específicos aun si no se identificaron
+        #    previamente los IDs (por ejemplo, cuando el volumen tiene fechas
+        #    distintas a las del payload).
+        if participantes:
+            filtros_rp = [f"ci_participante IN ({','.join(['%s'] * len(participantes))})"]
+            params_rp: list[Any] = list(participantes)
+            if fechas:
+                filtros_rp.append(
+                    f"id_reserva IN (SELECT id_reserva FROM reserva WHERE fecha IN ({','.join(['%s'] * len(fechas))}))"
+                )
+                params_rp.extend(fechas)
+            cur.execute(
+                "DELETE FROM reserva_participante WHERE " + " AND ".join(filtros_rp),
+                tuple(params_rp),
+            )
+
+        # 3) Eliminar reservas huérfanas (sin participantes) acotando por fechas
+        #    o por IDs encontrados para no impactar otros datos.
+        filtros_reserva_del = [
+            "NOT EXISTS (SELECT 1 FROM reserva_participante rp WHERE rp.id_reserva = reserva.id_reserva)"
+        ]
+        params_reserva_del: list[Any] = []
+
         if reserva_ids:
             placeholders_ids = ",".join(["%s"] * len(reserva_ids))
-            placeholders_cis = ",".join(["%s"] * len(participantes)) if participantes else ""
+            filtros_reserva_del.append(f"reserva.id_reserva IN ({placeholders_ids})")
+            params_reserva_del.extend(reserva_ids)
 
-            cur.execute(
-                f"DELETE FROM reserva_participante WHERE id_reserva IN ({placeholders_ids})"
-                + (" AND ci_participante IN (" + placeholders_cis + ")" if participantes else ""),
-                tuple(reserva_ids + list(participantes)),
-            )
+        if fechas:
+            placeholders_fechas = ",".join(["%s"] * len(fechas))
+            filtros_reserva_del.append(f"reserva.fecha IN ({placeholders_fechas})")
+            params_reserva_del.extend(fechas)
 
-            cur.execute(
-                f"""
-                DELETE FROM reserva
-                WHERE id_reserva IN ({placeholders_ids})
-                  AND NOT EXISTS (
-                        SELECT 1 FROM reserva_participante rp
-                        WHERE rp.id_reserva = reserva.id_reserva
-                    )
-                """,
-                tuple(reserva_ids),
-            )
+        cur.execute(
+            "DELETE FROM reserva WHERE " + " AND ".join(filtros_reserva_del),
+            tuple(params_reserva_del),
+        )
 
+        # 4) Limpiar sanciones de los participantes de prueba.
         if participantes:
             placeholders_cis = ",".join(["%s"] * len(participantes))
             cur.execute(
