@@ -1,6 +1,6 @@
-﻿# Sistema de Gestión de Salas de Estudio (UCU) – BD1
+# Sistema de Gestión de Salas de Estudio (UCU) – BD1
 
-Avance v0.1: estructura base, SQL (schema + seed), backend Python sin ORM (FastAPI), instructivo para correr local.
+Avance v0.3: FastAPI + MySQL (sin ORM), scripts de base de datos y smoke tests.
 
 ## Cómo correr (local)
 ```powershell
@@ -15,46 +15,39 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 
 # 4) Crear BD y datos en MySQL
-#   SOURCE ./sql/schema.sql;
+#   SOURCE ./sql/00_schema.sql;
 #   SOURCE ./sql/seed.sql;
 
 # 5) Levantar API
-pwsh .\scripts\run.ps1
-# -> http://127.0.0.1:8000/health y /turnos
+uvicorn src.app:app --host 127.0.0.1 --port 8000
+# -> http://127.0.0.1:8000/health | /docs | /ui
+```
 
-## Docker (rápido)
-- Levantar servicios:
-  ```powershell
-  docker compose up -d
+## Ejecución con Docker
 
-## ✅ Prueba rápida (modo profesor)
-```powershell
-# en Windows PowerShell
-git clone https://github.com/<tu-usuario>/salas-ucu-bd1
-cd salas-ucu-bd1
-Copy-Item .env.example .env
-powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1
+### Comando directo
+```bash
+docker compose up -d --build
+```
+- API: http://127.0.0.1:${API_PORT:-8000}/docs y /ui
+- Adminer: http://127.0.0.1:8080 (Servidor=db, user=root, pass=root, base=salas_db)
 
-## ✅ Prueba rápida (modo profesor)
-```powershell
-git clone https://github.com/<tu-usuario>/salas-ucu-bd1
-cd salas-ucu-bd1
-Copy-Item .env.example .env -Force
-powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
-# Swagger: http://127.0.0.1:8000/docs  · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)
+### Windows (un solo paso)
+Ejecuta `run.bat` en la raíz del repo:
+```
+run.bat
+```
+El script valida que Docker esté disponible, levanta `db`, `adminer` y `api`, espera el `/health` y abre automáticamente `/docs` y `/ui`.
 
-## ✅ Prueba rápida (modo profesor)
-```powershell
-git clone https://github.com/<tu-usuario>/salas-ucu-bd1
-cd salas-ucu-bd1
-Copy-Item .env.example .env -Force
-# El script verifica/arranca Docker Desktop, alinea .env y corre smoke.
-powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
-# Swagger: http://127.0.0.1:8000/docs  · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)
-
-### 🧪 Prueba rápida (modo profesor)
-El script arranca **Docker Desktop** si está apagado, selecciona automáticamente **DB_PORT** libre (3306→3307→3308), alinea `.env` y corre un smoke.
+## Scripts de profesor (alternativa)
 ```powershell
 Copy-Item .env.example .env -Force
 powershell -ExecutionPolicy Bypass -File .\scripts\prof-check.ps1 -KeepApi
-# Swagger: http://127.0.0.1:8000/docs · Adminer: http://localhost:8080 (Servidor=db, root/root, base=salas_db)
+# Swagger: http://127.0.0.1:8000/docs · Adminer: http://localhost:8080
+```
+
+## Tests
+```bash
+pytest
+```
+Puedes ejecutarlos en local (con las dependencias instaladas) o dentro de un contenedor que tenga Python disponible.

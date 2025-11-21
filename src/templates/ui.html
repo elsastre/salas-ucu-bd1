@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salas UCU - UI</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+    <header>
+        <h1>Salas UCU</h1>
+        <p>Interfaz mínima para consultar la API</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>Edificios</h2>
+            <button id="btn-edificios">Actualizar</button>
+            <ul id="lista-edificios"></ul>
+        </section>
+
+        <section>
+            <h2>Salas</h2>
+            <button id="btn-salas">Actualizar</button>
+            <ul id="lista-salas"></ul>
+        </section>
+
+        <section>
+            <h2>Disponibilidad</h2>
+            <form id="form-disponibilidad">
+                <label>Fecha: <input type="date" id="fecha" required /></label>
+                <label>Edificio: <input type="text" id="edificio" required placeholder="Ej: B" /></label>
+                <label>Sala: <input type="text" id="sala" required placeholder="Ej: 103" /></label>
+                <button type="submit">Consultar</button>
+            </form>
+            <div id="disponibilidad"></div>
+        </section>
+
+        <section>
+            <h2>Reservas</h2>
+            <button id="btn-reservas">Actualizar</button>
+            <ul id="lista-reservas"></ul>
+        </section>
+    </main>
+
+    <footer>
+        <p>API: <code>/docs</code> · UI: <code>/ui</code></p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
