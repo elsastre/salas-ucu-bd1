@@ -27,7 +27,8 @@ CREATE TABLE participante (
   nombre            VARCHAR(80) NOT NULL,
   apellido          VARCHAR(80) NOT NULL,
   email             VARCHAR(120) NOT NULL UNIQUE,
-  tipo_participante ENUM('estudiante','docente','posgrado') NOT NULL DEFAULT 'estudiante'
+  tipo_participante ENUM('estudiante','docente','posgrado') NOT NULL DEFAULT 'estudiante',
+  es_admin          TINYINT(1) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE participante_programa_academico (
