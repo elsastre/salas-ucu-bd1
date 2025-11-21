@@ -1312,7 +1312,11 @@ async function handleLogin(evt) {
   }
 }
 
+let bootstrapStarted = false;
+
 function bootstrap() {
+  if (bootstrapStarted) return;
+  bootstrapStarted = true;
   sessionManager.loadFromStorage();
   updateSessionUI();
   const loginForm = document.getElementById('frmLogin') || qs('#login-form');
@@ -1334,5 +1338,8 @@ function bootstrap() {
     startApp();
   }
 }
-
-document.addEventListener('DOMContentLoaded', bootstrap);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
