@@ -11,6 +11,50 @@ const state = {
   turnos: [],
 };
 
+const sessionManager = {
+  currentUser: null,
+  loadFromStorage() {
+    try {
+      const raw = localStorage.getItem('currentUser');
+      if (raw) {
+        this.currentUser = JSON.parse(raw);
+        window.currentUser = this.currentUser;
+      }
+    } catch (_) {
+      /* noop */
+    }
+  },
+  save(user) {
+    this.currentUser = user;
+    window.currentUser = user;
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    updateSessionUI();
+  },
+  clear() {
+    this.currentUser = null;
+    window.currentUser = null;
+    localStorage.removeItem('currentUser');
+    updateSessionUI();
+  },
+  isAdmin() {
+    return !!this.currentUser?.es_admin;
+  },
+};
+
+function requireLogin(msgEl) {
+  if (!sessionManager.currentUser) {
+    setAlert(msgEl, 'Debes iniciar sesión para usar esta sección', 'error');
+    throw new Error('login-required');
+  }
+}
+
+function requireAdmin(msgEl) {
+  if (!sessionManager.isAdmin()) {
+    setAlert(msgEl, 'Solo administradores pueden realizar esta acción', 'error');
+    throw new Error('admin-required');
+  }
+}
+
 function setAlert(el, message, type = '') {
   if (!el) return;
   el.textContent = message || '';
@@ -163,9 +207,15 @@ const salasUI = (() => {
   let editing = null;
 
   async function list() {
+    const msg = qs('#salas-msg');
+    try {
+      requireLogin(msg);
+    } catch (_) {
+      return tablePlaceholder(qs('#salas-table'), 'Inicia sesión para ver salas');
+    }
     const filtro = qs('#salas-filtro-edificio').value;
     const url = filtro ? `${apiBase}/salas?edificio=${encodeURIComponent(filtro)}` : `${apiBase}/salas`;
-    const data = await apiRequest('GET', url, null, qs('#salas-msg'));
+    const data = await apiRequest('GET', url, null, msg);
     renderTable(data || []);
   }
 
@@ -175,17 +225,18 @@ const salasUI = (() => {
     tbody.innerHTML = '';
     items.forEach((s) => {
       const tr = document.createElement('tr');
+      const actions = sessionManager.isAdmin()
+        ? `<div class="table-actions">
+            <button class="btn link" data-action="edit" data-edificio="${s.edificio}" data-nombre="${s.nombre_sala}">Editar</button>
+            <button class="btn link" data-action="delete" data-edificio="${s.edificio}" data-nombre="${s.nombre_sala}">Eliminar</button>
+          </div>`
+        : '<span class="muted">Solo administradores</span>';
       tr.innerHTML = `
         <td>${s.edificio}</td>
         <td>${s.nombre_sala}</td>
         <td>${s.capacidad}</td>
         <td><span class="badge">${s.tipo_sala}</span></td>
-        <td>
-          <div class="table-actions">
-            <button class="btn link" data-action="edit" data-edificio="${s.edificio}" data-nombre="${s.nombre_sala}">Editar</button>
-            <button class="btn link" data-action="delete" data-edificio="${s.edificio}" data-nombre="${s.nombre_sala}">Eliminar</button>
-          </div>
-        </td>`;
+        <td>${actions}</td>`;
       tbody.appendChild(tr);
     });
   }
@@ -210,6 +261,11 @@ const salasUI = (() => {
 
     const msg = qs('#sala-form-msg');
     setAlert(msg, '');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const isEdit = Boolean(editing);
     const url = isEdit
       ? `${apiBase}/salas/${encodeURIComponent(editing.edificio)}/${encodeURIComponent(editing.nombre_sala)}`
@@ -233,6 +289,12 @@ const salasUI = (() => {
   async function handleAction(evt) {
     const btn = evt.target.closest('button[data-action]');
     if (!btn) return;
+    const msg = qs('#salas-msg');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const { action, edificio, nombre } = btn.dataset;
     if (action === 'edit') {
       editing = { edificio, nombre_sala: nombre };
@@ -271,6 +333,11 @@ const participantesUI = (() => {
     const filtro = qs('#participantes-search').value.trim();
     const msg = qs('#participantes-msg');
     try {
+      requireLogin(msg);
+    } catch (_) {
+      return tablePlaceholder(qs('#participantes-table'), 'Inicia sesión para ver participantes');
+    }
+    try {
       setAlert(msg, '');
       if (filtro) {
         const ci = validateCi(filtro, msg);
@@ -290,17 +357,18 @@ const participantesUI = (() => {
     tbody.innerHTML = '';
     items.forEach((p) => {
       const tr = document.createElement('tr');
+      const actions = sessionManager.isAdmin()
+        ? `<div class="table-actions">
+            <button class="btn link" data-action="edit" data-ci="${p.ci}">Editar</button>
+            <button class="btn link" data-action="delete" data-ci="${p.ci}">Eliminar</button>
+          </div>`
+        : '<span class="muted">Solo administradores</span>';
       tr.innerHTML = `
         <td>${p.ci}</td>
         <td>${p.apellido}, ${p.nombre}</td>
         <td><span class="badge neutral">${p.tipo_participante || '—'}</span></td>
         <td>${p.email}</td>
-        <td>
-          <div class="table-actions">
-            <button class="btn link" data-action="edit" data-ci="${p.ci}">Editar</button>
-            <button class="btn link" data-action="delete" data-ci="${p.ci}">Eliminar</button>
-          </div>
-        </td>`;
+        <td>${actions}</td>`;
       tbody.appendChild(tr);
     });
   }
@@ -317,6 +385,11 @@ const participantesUI = (() => {
     evt.preventDefault();
     const msg = qs('#participantes-form-msg');
     setAlert(msg, '');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const ciNorm = validateCi(qs('#part-ci').value.trim(), msg);
     const nombre = validateName(qs('#part-nombre').value, 'Nombre', msg);
     const apellido = validateName(qs('#part-apellido').value, 'Apellido', msg);
@@ -345,6 +418,12 @@ const participantesUI = (() => {
   async function handleAction(evt) {
     const btn = evt.target.closest('button[data-action]');
     if (!btn) return;
+    const msg = qs('#participantes-msg');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const ci = btn.dataset.ci;
     if (btn.dataset.action === 'edit') {
       const row = btn.closest('tr').children;
@@ -373,14 +452,20 @@ const participantesUI = (() => {
     list();
   }
 
-  return { init };
+  return { init, list };
 })();
 
 const turnosUI = (() => {
   let editing = null;
 
   async function list() {
-    const data = await apiRequest('GET', `${apiBase}/turnos`, null, qs('#turnos-msg'));
+    const msg = qs('#turnos-msg');
+    try {
+      requireLogin(msg);
+    } catch (_) {
+      return tablePlaceholder(qs('#turnos-table'), 'Inicia sesión para ver turnos');
+    }
+    const data = await apiRequest('GET', `${apiBase}/turnos`, null, msg);
     render(data || []);
     await combos.loadTurnos();
   }
@@ -391,16 +476,17 @@ const turnosUI = (() => {
     tbody.innerHTML = '';
     items.forEach((t) => {
       const tr = document.createElement('tr');
+      const actions = sessionManager.isAdmin()
+        ? `<div class="table-actions">
+            <button class="btn link" data-action="edit" data-id="${t.id_turno}">Editar</button>
+            <button class="btn link" data-action="delete" data-id="${t.id_turno}">Eliminar</button>
+          </div>`
+        : '<span class="muted">Solo administradores</span>';
       tr.innerHTML = `
         <td>${t.id_turno}</td>
         <td>${t.hora_inicio}</td>
         <td>${t.hora_fin}</td>
-        <td>
-          <div class="table-actions">
-            <button class="btn link" data-action="edit" data-id="${t.id_turno}">Editar</button>
-            <button class="btn link" data-action="delete" data-id="${t.id_turno}">Eliminar</button>
-          </div>
-        </td>`;
+        <td>${actions}</td>`;
       tbody.appendChild(tr);
     });
   }
@@ -423,6 +509,7 @@ const turnosUI = (() => {
     const url = isEdit ? `${apiBase}/turnos/${id}` : `${apiBase}/turnos`;
     const method = isEdit ? 'PUT' : 'POST';
     try {
+      requireAdmin(qs('#turnos-form-msg'));
       await apiRequest(method, url, isEdit ? { hora_inicio, hora_fin } : payload, qs('#turnos-form-msg'));
       setAlert(qs('#turnos-form-msg'), isEdit ? 'Turno actualizado' : 'Turno creado', 'success');
       await list();
@@ -433,6 +520,12 @@ const turnosUI = (() => {
   async function handleAction(evt) {
     const btn = evt.target.closest('button[data-action]');
     if (!btn) return;
+    const msg = qs('#turnos-msg');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const id = btn.dataset.id;
     if (btn.dataset.action === 'edit') {
       const row = btn.closest('tr').children;
@@ -468,6 +561,12 @@ const reservasUI = (() => {
   }
 
   async function list() {
+    const msg = qs('#reservas-msg');
+    try {
+      requireLogin(msg);
+    } catch (_) {
+      return tablePlaceholder(qs('#reservas-table'), 'Inicia sesión para ver reservas');
+    }
     const fecha = qs('#reservas-filtro-fecha').value;
     const edificio = qs('#reservas-filtro-edificio').value;
     const estado = qs('#reservas-filtro-estado').value;
@@ -512,6 +611,11 @@ const reservasUI = (() => {
     evt.preventDefault();
     const msg = qs('#reservas-form-msg');
     setAlert(msg, '');
+    try {
+      requireLogin(msg);
+    } catch (_) {
+      return;
+    }
     const payload = {
       fecha: qs('#res-fecha').value,
       edificio: qs('#res-edificio').value,
@@ -534,6 +638,11 @@ const reservasUI = (() => {
   async function updateEstado(evt) {
     const btn = evt.target.closest('button[data-action="estado"]');
     if (!btn) return;
+    try {
+      requireLogin(qs('#reservas-msg'));
+    } catch (_) {
+      return;
+    }
     const id = btn.dataset.id;
     const select = btn.closest('tr').querySelector('.estado-select');
     const estado = select.value;
@@ -548,6 +657,11 @@ const reservasUI = (() => {
     const id = qs('#asis-id').value;
     const msg = qs('#asistencia-msg');
     setAlert(msg, '');
+    try {
+      requireLogin(msg);
+    } catch (_) {
+      return;
+    }
     const presentes = validateCiList(qs('#asis-presentes').value, msg) || [];
     if (!id) return;
     try {
@@ -568,6 +682,21 @@ const reservasUI = (() => {
     qs('#reservas-table').addEventListener('click', updateEstado);
     qs('#asistencia-form').addEventListener('submit', registrarAsistencia);
     qs('#res-edificio').addEventListener('change', (e) => combos.loadSalasFor(e.target.value, qs('#res-sala')));
+    qs('#reservar-como-yo').addEventListener('click', () => {
+      const msg = qs('#reservas-form-msg');
+      try {
+        requireLogin(msg);
+      } catch (_) {
+        return;
+      }
+      const field = qs('#res-participantes');
+      const ci = sessionManager.currentUser?.ci;
+      if (!ci) return;
+      const existing = parseCiList(field.value);
+      if (!existing.includes(ci)) existing.push(ci);
+      field.value = existing.join(', ');
+      setAlert(msg, 'Se añadió tu CI automáticamente', 'success');
+    });
     list();
   }
 
@@ -577,6 +706,11 @@ const reservasUI = (() => {
 const disponibilidadUI = (() => {
   async function consultar(evt) {
     evt.preventDefault();
+    try {
+      requireLogin(qs('#disponibilidad-msg'));
+    } catch (_) {
+      return;
+    }
     const fecha = qs('#disp-fecha').value;
     const edificio = qs('#disp-edificio').value;
     const sala = qs('#disp-sala').value;
@@ -633,6 +767,11 @@ const sancionesUI = (() => {
   async function list() {
     const ci = qs('#sanciones-filtro-ci').value.trim();
     const msg = qs('#sanciones-msg');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return tablePlaceholder(qs('#sanciones-table'), 'Solo administradores');
+    }
     setAlert(msg, '');
     let params = '';
     if (ci) {
@@ -679,6 +818,11 @@ const sancionesUI = (() => {
     const fecha_fin = qs('#sancion-fin').value;
     const msg = qs('#sanciones-form-msg');
     setAlert(msg, '');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const normCi = validateCi(ci, msg);
     if (!normCi || !fecha_inicio || !fecha_fin) return;
     try {
@@ -697,6 +841,12 @@ const sancionesUI = (() => {
   async function handleAction(evt) {
     const btn = evt.target.closest('button[data-action]');
     if (!btn) return;
+    const msg = qs('#sanciones-msg');
+    try {
+      requireAdmin(msg);
+    } catch (_) {
+      return;
+    }
     const ci = btn.dataset.ci;
     const inicio = btn.dataset.inicio;
     if (btn.dataset.action === 'edit') {
@@ -728,27 +878,7 @@ const sancionesUI = (() => {
 })();
 
 const reportesUI = (() => {
-  async function load() {
-    const desde = qs('#reportes-desde').value;
-    const hasta = qs('#reportes-hasta').value;
-    const params = new URLSearchParams();
-    if (desde) params.append('desde', desde);
-    if (hasta) params.append('hasta', hasta);
-    const suffix = params.toString() ? `?${params.toString()}` : '';
-    try {
-      const [salas, ocupacion, rol] = await Promise.all([
-        apiRequest('GET', `${apiBase}/reportes/salas-mas-usadas${suffix}`),
-        apiRequest('GET', `${apiBase}/reportes/ocupacion-por-edificio${suffix}`),
-        apiRequest('GET', `${apiBase}/reportes/uso-por-rol${suffix}`),
-      ]);
-      renderTable(qs('#reporte-salas'), salas, ['edificio', 'nombre_sala', 'total_reservas']);
-      renderTable(qs('#reporte-ocupacion'), ocupacion, ['edificio', 'total_reservas', 'porcentaje_sobre_total']);
-      renderTable(qs('#reporte-rol'), rol, ['rol', 'tipo_programa', 'total_reservas']);
-      setAlert(qs('#reportes-msg'), '');
-    } catch (err) {
-      setAlert(qs('#reportes-msg'), err.message, 'error');
-    }
-  }
+  const loaders = [];
 
   function renderTable(tbody, data, keys) {
     if (!data || !data.length) return tablePlaceholder(tbody, 'Sin datos');
@@ -760,12 +890,217 @@ const reportesUI = (() => {
     });
   }
 
-  function init() {
-    qs('#reportes-refresh').addEventListener('click', load);
-    load();
+  async function fetchReport(url, msgEl, adminOnly = false) {
+    try {
+      requireLogin(msgEl);
+      if (adminOnly) requireAdmin(msgEl);
+    } catch (_) {
+      return null;
+    }
+    return apiRequest('GET', url, null, msgEl);
   }
 
-  return { init };
+  function bindReport(formSelector, buildUrl, tableSelector, columns, msgSelector, opts = {}) {
+    const form = qs(formSelector);
+    const table = qs(tableSelector);
+    const msg = qs(msgSelector);
+    const handler = async (evt) => {
+      if (evt) evt.preventDefault();
+      const url = buildUrl();
+      try {
+        const data = await fetchReport(url, msg, opts.adminOnly);
+        if (!data) return;
+        if (opts.render) {
+          opts.render(table, data);
+        } else {
+          renderTable(table, data, columns);
+        }
+      } catch (err) {
+        setAlert(msg, err.message, 'error');
+      }
+    };
+    form?.addEventListener('submit', handler);
+    loaders.push(handler);
+    return handler;
+  }
+
+  function renderEfectividad(tbody, data) {
+    if (!data) return tablePlaceholder(tbody, 'Sin datos');
+    const rows = [
+      { estado: 'finalizada', total: data.total_finalizadas, porcentaje: `${data.porcentaje_finalizadas}%` },
+      { estado: 'cancelada', total: data.total_canceladas, porcentaje: `${data.porcentaje_canceladas}%` },
+      { estado: 'sin_asistencia', total: data.total_sin_asistencia, porcentaje: `${data.porcentaje_sin_asistencia}%` },
+    ];
+    renderTable(tbody, rows, ['estado', 'total', 'porcentaje']);
+  }
+
+  function init() {
+    bindReport(
+      '#rep-salas-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-salas-desde').value) params.append('desde', qs('#rep-salas-desde').value);
+        if (qs('#rep-salas-hasta').value) params.append('hasta', qs('#rep-salas-hasta').value);
+        params.append('limit', qs('#rep-salas-limit').value || 10);
+        return `${apiBase}/reportes/salas-mas-usadas?${params.toString()}`;
+      },
+      '#reporte-salas',
+      ['edificio', 'nombre_sala', 'total_reservas'],
+      '#rep-salas-msg',
+    );
+
+    bindReport(
+      '#rep-turnos-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-turnos-desde').value) params.append('desde', qs('#rep-turnos-desde').value);
+        if (qs('#rep-turnos-hasta').value) params.append('hasta', qs('#rep-turnos-hasta').value);
+        params.append('limit', qs('#rep-turnos-limit').value || 10);
+        return `${apiBase}/reportes/turnos-mas-demandados?${params.toString()}`;
+      },
+      '#reporte-turnos',
+      ['id_turno', 'hora_inicio', 'hora_fin', 'total_reservas'],
+      '#rep-turnos-msg',
+    );
+
+    bindReport(
+      '#rep-promedio-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-promedio-desde').value) params.append('desde', qs('#rep-promedio-desde').value);
+        if (qs('#rep-promedio-hasta').value) params.append('hasta', qs('#rep-promedio-hasta').value);
+        return `${apiBase}/reportes/promedio-participantes-por-sala?${params.toString()}`;
+      },
+      '#reporte-promedio',
+      ['edificio', 'nombre_sala', 'promedio_participantes'],
+      '#rep-promedio-msg',
+    );
+
+    bindReport(
+      '#rep-carrera-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-carrera-desde').value) params.append('desde', qs('#rep-carrera-desde').value);
+        if (qs('#rep-carrera-hasta').value) params.append('hasta', qs('#rep-carrera-hasta').value);
+        return `${apiBase}/reportes/reservas-por-carrera-facultad?${params.toString()}`;
+      },
+      '#reporte-carrera',
+      ['facultad', 'nombre_programa', 'total_reservas'],
+      '#rep-carrera-msg',
+    );
+
+    bindReport(
+      '#rep-ocupacion-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-ocupacion-desde').value) params.append('desde', qs('#rep-ocupacion-desde').value);
+        if (qs('#rep-ocupacion-hasta').value) params.append('hasta', qs('#rep-ocupacion-hasta').value);
+        return `${apiBase}/reportes/ocupacion-por-edificio?${params.toString()}`;
+      },
+      '#reporte-ocupacion',
+      ['edificio', 'total_reservas', 'porcentaje_sobre_total'],
+      '#rep-ocupacion-msg',
+    );
+
+    bindReport(
+      '#rep-rol-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-rol-desde').value) params.append('desde', qs('#rep-rol-desde').value);
+        if (qs('#rep-rol-hasta').value) params.append('hasta', qs('#rep-rol-hasta').value);
+        return `${apiBase}/reportes/reservas-y-asistencias-por-rol?${params.toString()}`;
+      },
+      '#reporte-rol',
+      ['rol', 'tipo_programa', 'total_reservas', 'con_asistencia', 'sin_asistencia', 'canceladas'],
+      '#rep-rol-msg',
+    );
+
+    bindReport(
+      '#rep-sanciones-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-sanciones-desde').value) params.append('desde', qs('#rep-sanciones-desde').value);
+        if (qs('#rep-sanciones-hasta').value) params.append('hasta', qs('#rep-sanciones-hasta').value);
+        return `${apiBase}/reportes/sanciones-por-rol?${params.toString()}`;
+      },
+      '#reporte-sanciones',
+      ['rol', 'tipo_programa', 'total_sanciones'],
+      '#rep-sanciones-msg',
+      { adminOnly: true },
+    );
+
+    bindReport(
+      '#rep-efectividad-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-efectividad-desde').value) params.append('desde', qs('#rep-efectividad-desde').value);
+        if (qs('#rep-efectividad-hasta').value) params.append('hasta', qs('#rep-efectividad-hasta').value);
+        return `${apiBase}/reportes/efectividad-reservas?${params.toString()}`;
+      },
+      '#reporte-efectividad',
+      ['estado', 'total', 'porcentaje'],
+      '#rep-efectividad-msg',
+      { render: renderEfectividad },
+    );
+
+    bindReport(
+      '#rep-uso-rol-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-uso-rol-desde').value) params.append('desde', qs('#rep-uso-rol-desde').value);
+        if (qs('#rep-uso-rol-hasta').value) params.append('hasta', qs('#rep-uso-rol-hasta').value);
+        return `${apiBase}/reportes/uso-por-rol?${params.toString()}`;
+      },
+      '#reporte-uso-rol',
+      ['rol', 'tipo_programa', 'total_reservas'],
+      '#rep-uso-rol-msg',
+    );
+
+    bindReport(
+      '#rep-top-participantes-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-top-desde').value) params.append('desde', qs('#rep-top-desde').value);
+        if (qs('#rep-top-hasta').value) params.append('hasta', qs('#rep-top-hasta').value);
+        params.append('limit', qs('#rep-top-limit').value || 5);
+        return `${apiBase}/reportes/top-participantes?${params.toString()}`;
+      },
+      '#reporte-top',
+      ['ci', 'nombre', 'apellido', 'total_reservas'],
+      '#rep-top-msg',
+    );
+
+    bindReport(
+      '#rep-no-show-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-no-show-desde').value) params.append('desde', qs('#rep-no-show-desde').value);
+        if (qs('#rep-no-show-hasta').value) params.append('hasta', qs('#rep-no-show-hasta').value);
+        params.append('limit', qs('#rep-no-show-limit').value || 5);
+        return `${apiBase}/reportes/salas-no-show?${params.toString()}`;
+      },
+      '#reporte-no-show',
+      ['edificio', 'nombre_sala', 'total_sin_asistencia'],
+      '#rep-no-show-msg',
+    );
+
+    bindReport(
+      '#rep-distribucion-form',
+      () => {
+        const params = new URLSearchParams();
+        if (qs('#rep-distribucion-desde').value) params.append('desde', qs('#rep-distribucion-desde').value);
+        if (qs('#rep-distribucion-hasta').value) params.append('hasta', qs('#rep-distribucion-hasta').value);
+        return `${apiBase}/reportes/distribucion-semana-turno?${params.toString()}`;
+      },
+      '#reporte-distribucion',
+      ['dia_semana', 'id_turno', 'total_reservas'],
+      '#rep-distribucion-msg',
+    );
+
+    loaders.forEach((fn) => fn());
+  }
+
+  return { init, reload: () => loaders.forEach((fn) => fn()) };
 })();
 
 function setTodayDefaults() {
@@ -776,27 +1111,88 @@ function setTodayDefaults() {
   });
 }
 
-async function bootstrap() {
-  navigation.init();
-  setTodayDefaults();
-  await combos.loadEdificios();
-  await combos.loadTurnos();
-  await combos.loadSalasFor(qs('#res-edificio').value, qs('#res-sala'));
-  await combos.loadSalasFor(qs('#disp-edificio').value, qs('#disp-sala'));
-  salasUI.init();
-  participantesUI.init();
-  turnosUI.init();
-  reservasUI.init();
-  disponibilidadUI.init();
-  sancionesUI.init();
-  reportesUI.init();
-  qs('#reload-data').addEventListener('click', async (e) => {
-    e.preventDefault();
+function updateSessionUI() {
+  const shell = qs('#app-shell');
+  const loginCard = qs('#login-card');
+  const sessionCard = qs('#session-card');
+  const info = qs('#session-info');
+  const hasUser = !!sessionManager.currentUser;
+  if (shell) shell.style.display = hasUser ? 'block' : 'none';
+  if (loginCard) loginCard.style.display = hasUser ? 'none' : 'block';
+  if (sessionCard) sessionCard.style.display = hasUser ? 'flex' : 'none';
+  if (info) {
+    info.textContent = hasUser
+      ? `Sesión: ${sessionManager.currentUser.nombre} ${sessionManager.currentUser.apellido} (${sessionManager.currentUser.tipo_participante}${sessionManager.isAdmin() ? ', admin' : ''})`
+      : 'Sin sesión activa.';
+  }
+}
+
+let appInitialized = false;
+
+async function startApp() {
+  if (!sessionManager.currentUser) return;
+  if (!appInitialized) {
+    navigation.init();
+    setTodayDefaults();
     await combos.loadEdificios();
     await combos.loadTurnos();
-    await reservasUI.list();
+    await combos.loadSalasFor(qs('#res-edificio').value, qs('#res-sala'));
+    await combos.loadSalasFor(qs('#disp-edificio').value, qs('#disp-sala'));
+    salasUI.init();
+    participantesUI.init();
+    turnosUI.init();
+    reservasUI.init();
+    disponibilidadUI.init();
+    sancionesUI.init();
+    reportesUI.init();
+    qs('#reload-data').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await combos.loadEdificios();
+      await combos.loadTurnos();
+      await reservasUI.list();
+      await salasUI.list();
+    });
+    appInitialized = true;
+  } else {
+    await combos.loadEdificios();
+    await combos.loadTurnos();
+    await combos.loadSalasFor(qs('#res-edificio').value, qs('#res-sala'));
+    await combos.loadSalasFor(qs('#disp-edificio').value, qs('#disp-sala'));
     await salasUI.list();
+    await participantesUI.list();
+    await turnosUI.list();
+    await reservasUI.list();
+    reportesUI.reload();
+    qs('#sanciones-refresh')?.click();
+  }
+  updateSessionUI();
+}
+
+async function handleLogin(evt) {
+  evt.preventDefault();
+  const msg = qs('#login-msg');
+  setAlert(msg, '');
+  const ci = validateCi(qs('#login-ci').value, msg);
+  if (!ci) return;
+  try {
+    const user = await apiRequest('POST', `${apiBase}/auth/login`, { ci }, msg);
+    sessionManager.save(user);
+    setAlert(msg, 'Sesión iniciada', 'success');
+    await startApp();
+  } catch (_) {}
+}
+
+function bootstrap() {
+  sessionManager.loadFromStorage();
+  updateSessionUI();
+  qs('#login-form').addEventListener('submit', handleLogin);
+  qs('#logout-btn').addEventListener('click', () => {
+    sessionManager.clear();
+    updateSessionUI();
   });
+  if (sessionManager.currentUser) {
+    startApp();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);

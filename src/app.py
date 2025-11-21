@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import FastAPI, HTTPException, Path, Query, Header
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -69,6 +69,15 @@ def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
                 """
             )
 
+        cur.execute("SHOW COLUMNS FROM participante LIKE 'es_admin'")
+        if cur.fetchone() is None:
+            cur.execute(
+                """
+                ALTER TABLE participante
+                ADD COLUMN es_admin TINYINT(1) NOT NULL DEFAULT 0
+                """
+            )
+
         # Normalizar CIs existentes (seeds viejos podían tener puntos/guiones).
         cur.execute("SET FOREIGN_KEY_CHECKS=0")
         for table, column in [
@@ -85,6 +94,14 @@ def ensure_schema_migrations(conn: mysql.connector.MySQLConnection) -> None:
                 """
             )
         cur.execute("SET FOREIGN_KEY_CHECKS=1")
+
+        try:
+            cur.execute(
+                "UPDATE participante SET es_admin = 1 WHERE ci = '59876543'"
+            )
+        except mysql.connector.Error:
+            # Si no existe el CI en una base vieja, no interrumpimos el flujo
+            pass
         _MIGRATIONS_APPLIED = True
     except mysql.connector.Error as e:
         raise HTTPException(
@@ -107,6 +124,22 @@ def normalize_ci(ci: str) -> str:
 
 def normalize_ci_list(cis: List[str]) -> List[str]:
     return [normalize_ci(ci) for ci in cis or []]
+
+
+def _fetch_participante(conn: mysql.connector.MySQLConnection, ci: str) -> dict[str, Any] | None:
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        """
+        SELECT ci, nombre, apellido, email, tipo_participante, es_admin
+        FROM participante
+        WHERE ci = %s
+        """,
+        (ci,),
+    )
+    row = cur.fetchone()
+    if row:
+        row["es_admin"] = bool(row.get("es_admin"))
+    return row
 
 
 ESTADOS_OCUPAN_DIA = ("activa", "sin_asistencia", "finalizada")
@@ -253,11 +286,68 @@ class ParticipanteUpdate(BaseModel):
     def _val_apellido(cls, v):
         return ParticipanteBase._val_nombre_apellido(v)
 
+# --------- MODELOS LOGIN ---------
+class LoginPayload(BaseModel):
+    ci: str
+
+
+class SesionOut(BaseModel):
+    ci: str
+    nombre: str
+    apellido: str
+    email: str
+    tipo_participante: str
+    es_admin: bool = False
+
 # --------- MODELOS REPORTES ---------
 class ReportSalaUso(BaseModel):
     edificio: str
     nombre_sala: str
     total_reservas: int
+
+
+class ReportTurnoDemandado(BaseModel):
+    id_turno: int
+    hora_inicio: str
+    hora_fin: str
+    total_reservas: int
+
+
+class ReportPromedioParticipantes(BaseModel):
+    edificio: str
+    nombre_sala: str
+    promedio_participantes: float
+
+
+class ReportReservasPorCarrera(BaseModel):
+    facultad: str
+    nombre_programa: str
+    total_reservas: int
+
+
+class ReportReservasAsistenciasRol(BaseModel):
+    rol: str
+    tipo_programa: str
+    total_reservas: int
+    con_asistencia: int
+    sin_asistencia: int
+    canceladas: int
+
+
+class ReportSancionesPorRol(BaseModel):
+    rol: str
+    tipo_programa: str
+    total_sanciones: int
+
+
+class ReportEfectividadReservas(BaseModel):
+    total_reservas: int
+    total_finalizadas: int
+    total_canceladas: int
+    total_sin_asistencia: int
+    porcentaje_finalizadas: float
+    porcentaje_canceladas: float
+    porcentaje_sin_asistencia: float
 
 
 class ReportOcupacionEdificio(BaseModel):
@@ -269,6 +359,25 @@ class ReportOcupacionEdificio(BaseModel):
 class ReportUsoPorRol(BaseModel):
     rol: str
     tipo_programa: str
+    total_reservas: int
+
+
+class ReportTopParticipante(BaseModel):
+    ci: str
+    nombre: str
+    apellido: str
+    total_reservas: int
+
+
+class ReportSalaNoShow(BaseModel):
+    edificio: str
+    nombre_sala: str
+    total_sin_asistencia: int
+
+
+class ReportDistribucionSemana(BaseModel):
+    dia_semana: str
+    id_turno: int
     total_reservas: int
 
 
@@ -1453,6 +1562,43 @@ def limpiar_smoke(payload: LimpiarSmokeIn):
     finally:
         conn.close()
 
+
+# ==========================
+#  AUTH LÓGICO
+# ==========================
+
+
+@app.post("/auth/login", response_model=SesionOut)
+def login(payload: LoginPayload):
+    ci = normalize_ci(payload.ci)
+    conn = get_conn()
+    try:
+        row = _fetch_participante(conn, ci)
+        if not row:
+            raise HTTPException(status_code=404, detail="Participante no encontrado")
+        return row
+    finally:
+        conn.close()
+
+
+@app.get("/auth/me", response_model=SesionOut)
+def auth_me(
+    ci: str | None = Query(None, description="CI del actor", alias="ci"),
+    x_actor_ci: str | None = Header(None, convert_underscores=False),
+):
+    ci = ci or x_actor_ci
+    if ci is None:
+        raise HTTPException(status_code=422, detail="Debe indicar CI")
+    norm = normalize_ci(ci)
+    conn = get_conn()
+    try:
+        row = _fetch_participante(conn, norm)
+        if not row:
+            raise HTTPException(status_code=404, detail="Participante no encontrado")
+        return row
+    finally:
+        conn.close()
+
 # ==========================
 #  PARTICIPANTES - ABM
 # ==========================
@@ -1819,6 +1965,264 @@ def eliminar_sancion(
 #  REPORTES - BI
 # ==========================
 
+
+def _fecha_filtros(desde: str | None, hasta: str | None, campo: str = "r.fecha"):
+    conditions = []
+    params: list[Any] = []
+    if desde:
+        conditions.append(f"{campo} >= %s")
+        params.append(desde)
+    if hasta:
+        conditions.append(f"{campo} <= %s")
+        params.append(hasta)
+    return conditions, params
+
+
+@app.get(
+    "/reportes/turnos-mas-demandados",
+    response_model=List[ReportTurnoDemandado],
+)
+def report_turnos_mas_demandados(
+    limit: int = Query(10, ge=1, le=100, description="Cantidad máxima de turnos"),
+    desde: str | None = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.insert(0, "r.estado IN ('activa','finalizada','sin_asistencia')")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              t.id_turno,
+              t.hora_inicio,
+              t.hora_fin,
+              COUNT(*) AS total_reservas
+            FROM reserva r
+            JOIN turno t ON t.id_turno = r.id_turno
+            WHERE {where_clause}
+            GROUP BY t.id_turno, t.hora_inicio, t.hora_fin
+            ORDER BY total_reservas DESC, t.id_turno
+            LIMIT %s
+        """
+        params.append(limit)
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        for r in rows:
+            r["hora_inicio"] = _fmt_time(r["hora_inicio"])
+            r["hora_fin"] = _fmt_time(r["hora_fin"])
+        return rows
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando reporte de turnos: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/promedio-participantes-por-sala",
+    response_model=List[ReportPromedioParticipantes],
+)
+def report_promedio_participantes_por_sala(
+    desde: str | None = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.insert(0, "r.estado IN ('activa','finalizada','sin_asistencia')")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              sub.edificio,
+              sub.nombre_sala,
+              ROUND(AVG(sub.cant_participantes), 2) AS promedio_participantes
+            FROM (
+              SELECT r.id_reserva, r.edificio, r.nombre_sala,
+                     COUNT(rp.ci_participante) AS cant_participantes
+              FROM reserva r
+              LEFT JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+              WHERE {where_clause}
+              GROUP BY r.id_reserva, r.edificio, r.nombre_sala
+            ) sub
+            GROUP BY sub.edificio, sub.nombre_sala
+            ORDER BY promedio_participantes DESC, sub.edificio, sub.nombre_sala
+        """
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando promedio de participantes: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/reservas-por-carrera-facultad",
+    response_model=List[ReportReservasPorCarrera],
+)
+def report_reservas_por_carrera_facultad(
+    desde: str | None = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.insert(0, "r.estado IN ('activa','finalizada','sin_asistencia')")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              f.nombre AS facultad,
+              pa.nombre_programa,
+              COUNT(DISTINCT r.id_reserva) AS total_reservas
+            FROM reserva r
+            JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+            JOIN participante_programa_academico ppa ON ppa.ci_participante = rp.ci_participante
+            JOIN programa_academico pa ON pa.nombre_programa = ppa.nombre_programa
+            JOIN facultad f ON f.id_facultad = pa.id_facultad
+            WHERE {where_clause}
+            GROUP BY f.nombre, pa.nombre_programa
+            ORDER BY total_reservas DESC, f.nombre, pa.nombre_programa
+        """
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando reservas por carrera: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/reservas-y-asistencias-por-rol",
+    response_model=List[ReportReservasAsistenciasRol],
+)
+def report_reservas_y_asistencias_por_rol(
+    desde: str | None = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        if conditions:
+            conditions.append("r.estado IN ('activa','cancelada','finalizada','sin_asistencia')")
+        else:
+            conditions = ["r.estado IN ('activa','cancelada','finalizada','sin_asistencia')"]
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+              detalle.rol,
+              detalle.tipo_programa,
+              COUNT(DISTINCT detalle.id_reserva) AS total_reservas,
+              SUM(detalle.tiene_asistencia) AS con_asistencia,
+              SUM(detalle.es_sin_asistencia) AS sin_asistencia,
+              SUM(detalle.es_cancelada) AS canceladas
+            FROM (
+              SELECT
+                r.id_reserva,
+                r.estado,
+                ppa.rol,
+                pa.tipo AS tipo_programa,
+                CASE WHEN MAX(rp.asistencia) = 1 THEN 1 ELSE 0 END AS tiene_asistencia,
+                CASE WHEN r.estado = 'sin_asistencia' THEN 1 ELSE 0 END AS es_sin_asistencia,
+                CASE WHEN r.estado = 'cancelada' THEN 1 ELSE 0 END AS es_cancelada
+              FROM reserva r
+              JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+              JOIN participante_programa_academico ppa ON ppa.ci_participante = rp.ci_participante
+              JOIN programa_academico pa ON pa.nombre_programa = ppa.nombre_programa
+              WHERE {where_clause}
+              GROUP BY r.id_reserva, r.estado, ppa.rol, pa.tipo
+            ) detalle
+            GROUP BY detalle.rol, detalle.tipo_programa
+            ORDER BY total_reservas DESC, detalle.rol, detalle.tipo_programa
+        """
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando reservas y asistencias por rol: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/sanciones-por-rol",
+    response_model=List[ReportSancionesPorRol],
+)
+def report_sanciones_por_rol(
+    desde: str | None = Query(None, description="Fecha inicio desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha fin hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta, campo="sp.fecha_inicio")
+        if hasta:
+            conditions.append("sp.fecha_fin <= %s")
+            params.append(hasta)
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              ppa.rol,
+              pa.tipo AS tipo_programa,
+              COUNT(*) AS total_sanciones
+            FROM sancion_participante sp
+            JOIN participante_programa_academico ppa ON ppa.ci_participante = sp.ci_participante
+            JOIN programa_academico pa ON pa.nombre_programa = ppa.nombre_programa
+            WHERE {where_clause}
+            GROUP BY ppa.rol, pa.tipo
+            ORDER BY total_sanciones DESC, ppa.rol, pa.tipo
+        """
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando sanciones por rol: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/efectividad-reservas",
+    response_model=ReportEfectividadReservas,
+)
+def report_efectividad_reservas(
+    desde: str | None = Query(None, description="Fecha desde (YYYY-MM-DD)"),
+    hasta: str | None = Query(None, description="Fecha hasta (YYYY-MM-DD)"),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT estado, COUNT(*) AS total
+            FROM reserva
+            WHERE {where_clause}
+            GROUP BY estado
+        """
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        counts = {r["estado"]: r["total"] for r in rows}
+        total_reservas = sum(counts.values()) or 0
+        total_finalizadas = counts.get("finalizada", 0)
+        total_canceladas = counts.get("cancelada", 0)
+        total_sin_asistencia = counts.get("sin_asistencia", 0)
+        def pct(n):
+            return round(100.0 * n / total_reservas, 2) if total_reservas else 0.0
+        return {
+            "total_reservas": total_reservas,
+            "total_finalizadas": total_finalizadas,
+            "total_canceladas": total_canceladas,
+            "total_sin_asistencia": total_sin_asistencia,
+            "porcentaje_finalizadas": pct(total_finalizadas),
+            "porcentaje_canceladas": pct(total_canceladas),
+            "porcentaje_sin_asistencia": pct(total_sin_asistencia),
+        }
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando efectividad de reservas: {e}")
+    finally:
+        conn.close()
+
 @app.get(
     "/reportes/salas-mas-usadas",
     response_model=List[ReportSalaUso],
@@ -1985,5 +2389,116 @@ def report_uso_por_rol(
             status_code=500,
             detail=f"Error generando reporte de uso por rol: {e}",
         )
+    finally:
+        conn.close()
+
+
+# --- Consultas BI adicionales ---
+# 1) Top participantes por cantidad de reservas.
+# 2) Salas con más inasistencias (no-show) para focalizar capacitaciones.
+# 3) Distribución de reservas por día de la semana y turno (insumo para heatmaps).
+
+
+@app.get(
+    "/reportes/top-participantes",
+    response_model=List[ReportTopParticipante],
+)
+def report_top_participantes(
+    limit: int = Query(10, ge=1, le=100, description="Cantidad de personas"),
+    desde: str | None = Query(None),
+    hasta: str | None = Query(None),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.insert(0, "r.estado IN ('activa','finalizada','sin_asistencia')")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              p.ci,
+              p.nombre,
+              p.apellido,
+              COUNT(DISTINCT r.id_reserva) AS total_reservas
+            FROM reserva r
+            JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+            JOIN participante p ON p.ci = rp.ci_participante
+            WHERE {where_clause}
+            GROUP BY p.ci, p.nombre, p.apellido
+            ORDER BY total_reservas DESC, p.apellido, p.nombre
+            LIMIT %s
+        """
+        params.append(limit)
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando top de participantes: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/salas-no-show",
+    response_model=List[ReportSalaNoShow],
+)
+def report_salas_no_show(
+    limit: int = Query(10, ge=1, le=100, description="Cantidad de salas"),
+    desde: str | None = Query(None),
+    hasta: str | None = Query(None),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.append("r.estado = 'sin_asistencia'")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              r.edificio,
+              r.nombre_sala,
+              COUNT(*) AS total_sin_asistencia
+            FROM reserva r
+            WHERE {where_clause}
+            GROUP BY r.edificio, r.nombre_sala
+            ORDER BY total_sin_asistencia DESC, r.edificio, r.nombre_sala
+            LIMIT %s
+        """
+        params.append(limit)
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando no-show por sala: {e}")
+    finally:
+        conn.close()
+
+
+@app.get(
+    "/reportes/distribucion-semana-turno",
+    response_model=List[ReportDistribucionSemana],
+)
+def report_distribucion_semana_turno(
+    desde: str | None = Query(None),
+    hasta: str | None = Query(None),
+):
+    conn = get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = _fecha_filtros(desde, hasta)
+        conditions.insert(0, "r.estado IN ('activa','finalizada','sin_asistencia')")
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT
+              DATE_FORMAT(r.fecha, '%W') AS dia_semana,
+              r.id_turno,
+              COUNT(*) AS total_reservas
+            FROM reserva r
+            WHERE {where_clause}
+            GROUP BY dia_semana, r.id_turno
+            ORDER BY total_reservas DESC, dia_semana, r.id_turno
+        """
+        cur.execute(query, tuple(params))
+        return cur.fetchall()
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=f"Error generando distribución semanal: {e}")
     finally:
         conn.close()

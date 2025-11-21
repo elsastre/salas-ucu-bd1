@@ -22,17 +22,42 @@
         </div>
     </header>
 
-    <nav class="tabs" aria-label="Secciones de la aplicación">
-        <button class="tab active" data-target="salas-section">Salas</button>
-        <button class="tab" data-target="participantes-section">Participantes</button>
-        <button class="tab" data-target="turnos-section">Turnos</button>
-        <button class="tab" data-target="reservas-section">Reservas</button>
-        <button class="tab" data-target="disponibilidad-section">Disponibilidad</button>
-        <button class="tab" data-target="sanciones-section">Sanciones</button>
-        <button class="tab" data-target="reportes-section">Reportes</button>
-    </nav>
+    <section id="login-card" class="card">
+        <div class="card-header">
+            <h2>Ingreso al panel</h2>
+            <p class="muted">Identifícate con tu CI para habilitar el dashboard. No se requieren contraseñas.</p>
+        </div>
+        <form id="login-form" class="form-grid">
+            <label>CI
+                <input type="text" id="login-ci" placeholder="Ej: 59.876.543" required />
+            </label>
+            <div class="form-actions">
+                <button class="btn" type="submit">Entrar</button>
+            </div>
+            <div class="alert" id="login-msg"></div>
+        </form>
+        <p class="help">Debes iniciar sesión para usar reservas, reportes y ABMs. El rol admin habilita las acciones maestras.</p>
+    </section>
 
-    <main>
+    <div id="session-card" class="card session-card">
+        <div id="session-info" class="muted">Sin sesión activa.</div>
+        <div class="session-actions">
+            <button class="btn ghost" id="logout-btn">Cerrar sesión</button>
+        </div>
+    </div>
+
+    <div id="app-shell">
+        <nav class="tabs" aria-label="Secciones de la aplicación">
+            <button class="tab active" data-target="salas-section">Salas</button>
+            <button class="tab" data-target="participantes-section">Participantes</button>
+            <button class="tab" data-target="turnos-section">Turnos</button>
+            <button class="tab" data-target="reservas-section">Reservas</button>
+            <button class="tab" data-target="disponibilidad-section">Disponibilidad</button>
+            <button class="tab" data-target="sanciones-section">Sanciones</button>
+            <button class="tab" data-target="reportes-section">Reportes</button>
+        </nav>
+
+        <main>
         <section id="salas-section" class="panel visible">
             <div class="section-header">
                 <div>
@@ -268,6 +293,7 @@
                         </label>
                         <label>Participantes (CI separadas por coma)
                             <textarea id="res-participantes" rows="2" placeholder="12345678,23456789" required></textarea>
+                            <button type="button" class="btn secondary" id="reservar-como-yo">Reservar como yo</button>
                         </label>
                         <label>Estado
                             <select id="res-estado">
@@ -410,21 +436,20 @@
                 <div>
                     <p class="eyebrow">Reportes</p>
                     <h2>Uso y ocupación</h2>
-                    <p class="help">Consulta salas más usadas, ocupación por edificio y uso por rol. Los filtros de fecha son opcionales.</p>
-                </div>
-                <div class="filters">
-                    <label>Desde
-                        <input type="date" id="reportes-desde" />
-                    </label>
-                    <label>Hasta
-                        <input type="date" id="reportes-hasta" />
-                    </label>
-                    <button class="btn secondary" id="reportes-refresh">Actualizar reportes</button>
+                    <p class="help">Cada tarjeta consulta un endpoint de BI. Usa los filtros para acotar por fecha o cantidad de filas.</p>
                 </div>
             </div>
-            <div class="grid three">
+
+            <div class="grid two">
                 <div class="card">
                     <h3>Salas más reservadas</h3>
+                    <form id="rep-salas-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-salas-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-salas-hasta" /></label>
+                        <label>Top <input type="number" id="rep-salas-limit" min="1" max="100" value="10" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-salas-msg"></div>
                     <div class="table-wrapper">
                         <table>
                             <thead><tr><th>Edificio</th><th>Sala</th><th>Total reservas</th></tr></thead>
@@ -432,8 +457,67 @@
                         </table>
                     </div>
                 </div>
+
+                <div class="card">
+                    <h3>Turnos más demandados</h3>
+                    <form id="rep-turnos-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-turnos-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-turnos-hasta" /></label>
+                        <label>Top <input type="number" id="rep-turnos-limit" min="1" max="100" value="10" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-turnos-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Turno</th><th>Inicio</th><th>Fin</th><th>Total</th></tr></thead>
+                            <tbody id="reporte-turnos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid two">
+                <div class="card">
+                    <h3>Promedio de participantes por sala</h3>
+                    <form id="rep-promedio-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-promedio-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-promedio-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-promedio-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Edificio</th><th>Sala</th><th>Promedio participantes</th></tr></thead>
+                            <tbody id="reporte-promedio"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Reservas por carrera y facultad</h3>
+                    <form id="rep-carrera-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-carrera-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-carrera-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-carrera-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Facultad</th><th>Programa</th><th>Total</th></tr></thead>
+                            <tbody id="reporte-carrera"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid two">
                 <div class="card">
                     <h3>Ocupación por edificio</h3>
+                    <form id="rep-ocupacion-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-ocupacion-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-ocupacion-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-ocupacion-msg"></div>
                     <div class="table-wrapper">
                         <table>
                             <thead><tr><th>Edificio</th><th>Total</th><th>% sobre total</th></tr></thead>
@@ -442,18 +526,125 @@
                     </div>
                 </div>
                 <div class="card">
-                    <h3>Uso por rol / programa</h3>
+                    <h3>Reservas y asistencias por rol</h3>
+                    <form id="rep-rol-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-rol-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-rol-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-rol-msg"></div>
                     <div class="table-wrapper">
                         <table>
-                            <thead><tr><th>Rol</th><th>Tipo programa</th><th>Total reservas</th></tr></thead>
+                            <thead><tr><th>Rol</th><th>Tipo programa</th><th>Total</th><th>Con asistencia</th><th>Sin asistencia</th><th>Canceladas</th></tr></thead>
                             <tbody id="reporte-rol"></tbody>
                         </table>
                     </div>
                 </div>
             </div>
-            <div class="alert" id="reportes-msg"></div>
+
+            <div class="grid two">
+                <div class="card">
+                    <h3>Sanciones por rol</h3>
+                    <form id="rep-sanciones-form" class="form-inline">
+                        <label>Inicio desde <input type="date" id="rep-sanciones-desde" /></label>
+                        <label>Fin hasta <input type="date" id="rep-sanciones-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-sanciones-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Rol</th><th>Tipo programa</th><th>Total sanciones</th></tr></thead>
+                            <tbody id="reporte-sanciones"></tbody>
+                        </table>
+                    </div>
+                    <p class="help">Visible para admins. Útil para seguimiento de inasistencias.</p>
+                </div>
+                <div class="card">
+                    <h3>Efectividad de reservas</h3>
+                    <form id="rep-efectividad-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-efectividad-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-efectividad-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-efectividad-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Estado</th><th>Total</th><th>%</th></tr></thead>
+                            <tbody id="reporte-efectividad"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid three">
+                <div class="card">
+                    <h3>Uso por rol (simple)</h3>
+                    <form id="rep-uso-rol-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-uso-rol-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-uso-rol-hasta" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-uso-rol-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Rol</th><th>Tipo programa</th><th>Total</th></tr></thead>
+                            <tbody id="reporte-uso-rol"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Top participantes</h3>
+                    <form id="rep-top-participantes-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-top-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-top-hasta" /></label>
+                        <label>Top <input type="number" id="rep-top-limit" min="1" max="100" value="5" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-top-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>CI</th><th>Nombre</th><th>Total</th></tr></thead>
+                            <tbody id="reporte-top"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Salas con más no-show</h3>
+                    <form id="rep-no-show-form" class="form-inline">
+                        <label>Desde <input type="date" id="rep-no-show-desde" /></label>
+                        <label>Hasta <input type="date" id="rep-no-show-hasta" /></label>
+                        <label>Top <input type="number" id="rep-no-show-limit" min="1" max="100" value="5" /></label>
+                        <button class="btn secondary" type="submit">Consultar</button>
+                    </form>
+                    <div class="alert" id="rep-no-show-msg"></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr><th>Edificio</th><th>Sala</th><th>Sin asistencia</th></tr></thead>
+                            <tbody id="reporte-no-show"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Distribución por día y turno</h3>
+                <form id="rep-distribucion-form" class="form-inline">
+                    <label>Desde <input type="date" id="rep-distribucion-desde" /></label>
+                    <label>Hasta <input type="date" id="rep-distribucion-hasta" /></label>
+                    <button class="btn secondary" type="submit">Consultar</button>
+                </form>
+                <div class="alert" id="rep-distribucion-msg"></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Día</th><th>Turno</th><th>Total reservas</th></tr></thead>
+                        <tbody id="reporte-distribucion"></tbody>
+                    </table>
+                </div>
+            </div>
         </section>
     </main>
+
+    </div>
 
     <footer>
         <p>API: <code>/docs</code> · UI: <code>/ui</code></p>

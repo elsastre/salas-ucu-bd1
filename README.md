@@ -74,3 +74,29 @@ Invoke-RestMethod "http://127.0.0.1:8000/admin/limpiar-smoke" -Method POST -Cont
 ```
 
 El script `prof-check.ps1` ya cuenta con el flag `-Clean` para hacer `docker compose down --volumes` antes de levantar servicios.
+
+## Login lógico y roles
+
+- El panel `/ui` ahora pide iniciar sesión con la CI de un participante (sin contraseña). El backend expone `/auth/login` para validar
+  la existencia y devolver `es_admin`.
+- La UI guarda la sesión en `localStorage` y bloquea todas las pestañas hasta loguearse. El encabezado muestra el nombre, rol y si el
+  usuario es admin.
+- Solo administradores pueden crear/editar/eliminar salas, participantes, turnos y sanciones manuales. Los botones quedan deshabilita-
+  dos y, si se fuerzan, aparece el mensaje “Solo administradores pueden realizar esta acción”.
+- Para pruebas rápidas hay un admin por defecto (CI `59876543`).
+
+## Reportes cubiertos
+
+Todos los reportes de la letra y tres consultas adicionales están expuestos como endpoints GET y accesibles desde la pestaña de
+reportes en `/ui` (cada tarjeta tiene filtros propios):
+
+- `/reportes/salas-mas-usadas` (top salas) y `/reportes/turnos-mas-demandados`.
+- `/reportes/promedio-participantes-por-sala` y `/reportes/reservas-por-carrera-facultad`.
+- `/reportes/ocupacion-por-edificio`.
+- `/reportes/reservas-y-asistencias-por-rol` y `/reportes/uso-por-rol`.
+- `/reportes/sanciones-por-rol` (visible en UI para admins).
+- `/reportes/efectividad-reservas` (efectivamente usadas vs canceladas/no show).
+- Extras BI: `/reportes/top-participantes`, `/reportes/salas-no-show`, `/reportes/distribucion-semana-turno`.
+
+La UI permite ejecutar cada consulta con filtros de fecha y límites, mostrando tablas interpretables sin requerir headers de auth en
+los endpoints existentes.
