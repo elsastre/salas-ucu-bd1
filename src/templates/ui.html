@@ -7,58 +7,67 @@
     <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-    <header class="hero">
-        <div>
-            <p class="eyebrow">Sistema para Gestión de Reserva de Salas</p>
-            <h1>Salas UCU</h1>
-            <p class="lead">
-                Panel interno para administrativos y biblioteca. Gestiona salas, participantes, turnos, reservas,
-                asistencia, sanciones y reportes desde un solo lugar.
-            </p>
-        </div>
-        <div class="hero-actions">
-            <a class="btn ghost" href="/docs" target="_blank">Ver API /docs</a>
-            <a class="btn" href="#" id="reload-data">Recargar datos</a>
-        </div>
-    </header>
-
-    <section id="login-card" class="card">
-        <div class="card-header">
-            <h2>Ingreso al panel</h2>
-            <p class="muted">Identifícate con tu CI para habilitar el dashboard. No se requieren contraseñas.</p>
-        </div>
-        <form id="login-form" class="form-grid">
-            <label>CI
-                <input type="text" id="login-ci" placeholder="Ej: 59.876.543" required />
-            </label>
-            <div class="form-actions">
-                <button class="btn" type="submit">Entrar</button>
+    <div class="page-shell">
+        <header class="hero">
+            <div>
+                <p class="eyebrow">Sistema para Gestión de Reserva de Salas</p>
+                <h1>Salas UCU</h1>
+                <p class="lead">
+                    Panel interno para administrativos y biblioteca. Gestiona salas, participantes, turnos, reservas,
+                    asistencia, sanciones y reportes desde un solo lugar.
+                </p>
             </div>
-            <div class="alert" id="login-msg"></div>
-        </form>
-        <p class="help">Debes iniciar sesión para usar reservas, reportes y ABMs. El rol admin habilita las acciones maestras.</p>
-    </section>
+            <div class="hero-actions">
+                <a class="btn ghost" href="/docs" target="_blank">Ver API /docs</a>
+                <a class="btn" href="#" id="reload-data">Recargar datos</a>
+            </div>
+        </header>
 
-    <div id="session-card" class="card session-card">
-        <div id="session-info" class="muted">Sin sesión activa.</div>
-        <div class="session-actions">
-            <button class="btn ghost" id="logout-btn">Cerrar sesión</button>
+        <section id="login-card" class="card card-standalone">
+            <div class="card-header">
+                <div>
+                    <h2>Ingreso al panel</h2>
+                    <p class="muted">Identifícate con tu CI para habilitar el dashboard. No se requieren contraseñas.</p>
+                </div>
+            </div>
+            <form id="login-form" class="form-grid tight">
+                <label>CI
+                    <input type="text" id="login-ci" placeholder="Ej: 59.876.543" required />
+                    <span class="help">Formato sugerido: 7 u 8 dígitos, con o sin puntos.</span>
+                </label>
+                <div class="form-actions">
+                    <button class="btn" type="submit">Entrar</button>
+                </div>
+                <div class="alert" id="login-msg"></div>
+            </form>
+            <p class="help">Debes iniciar sesión para usar reservas, reportes y ABMs. El rol admin habilita las acciones maestras.</p>
+        </section>
+
+        <div id="session-card" class="card session-card">
+            <div class="session-details">
+                <div id="session-info" class="muted">Sin sesión activa.</div>
+                <div id="session-tags" class="session-tags"></div>
+            </div>
+            <div class="session-actions">
+                <button class="btn ghost" id="logout-btn">Cerrar sesión</button>
+            </div>
         </div>
-    </div>
 
-    <div id="app-shell">
-        <nav class="tabs" aria-label="Secciones de la aplicación">
-            <button class="tab active" data-target="salas-section">Salas</button>
-            <button class="tab" data-target="participantes-section">Participantes</button>
-            <button class="tab" data-target="turnos-section">Turnos</button>
-            <button class="tab" data-target="reservas-section">Reservas</button>
-            <button class="tab" data-target="disponibilidad-section">Disponibilidad</button>
-            <button class="tab" data-target="sanciones-section">Sanciones</button>
-            <button class="tab" data-target="reportes-section">Reportes</button>
-        </nav>
+        <div id="app-shell">
+        <div class="tabs-shell">
+            <nav class="tabs" aria-label="Secciones de la aplicación">
+                <button class="tab active" data-role="admin" data-target="salas-section">Salas</button>
+                <button class="tab" data-role="admin" data-target="participantes-section">Participantes</button>
+                <button class="tab" data-role="admin" data-target="turnos-section">Turnos</button>
+                <button class="tab" data-target="reservas-section">Reservas</button>
+                <button class="tab" data-target="disponibilidad-section">Disponibilidad</button>
+                <button class="tab" data-role="admin" data-target="sanciones-section">Sanciones</button>
+                <button class="tab" data-target="reportes-section">Reportes</button>
+            </nav>
+        </div>
 
         <main>
-        <section id="salas-section" class="panel visible">
+        <section id="salas-section" class="panel visible" data-role="admin">
             <div class="section-header">
                 <div>
                     <p class="eyebrow">Salas</p>
@@ -120,7 +129,7 @@
             </div>
         </section>
 
-        <section id="participantes-section" class="panel">
+        <section id="participantes-section" class="panel" data-role="admin">
             <div class="section-header">
                 <div>
                     <p class="eyebrow">Participantes</p>
@@ -185,7 +194,7 @@
             </div>
         </section>
 
-        <section id="turnos-section" class="panel">
+        <section id="turnos-section" class="panel" data-role="admin">
             <div class="section-header">
                 <div>
                     <p class="eyebrow">Turnos</p>
@@ -380,7 +389,7 @@
             </div>
         </section>
 
-        <section id="sanciones-section" class="panel">
+        <section id="sanciones-section" class="panel" data-role="admin">
             <div class="section-header">
                 <div>
                     <p class="eyebrow">Sanciones</p>
@@ -634,7 +643,7 @@
                     <button class="btn secondary" type="submit">Consultar</button>
                 </form>
                 <div class="alert" id="rep-distribucion-msg"></div>
-                <div class="table-wrapper">
+                <div class="table-wrapper scrollable">
                     <table>
                         <thead><tr><th>Día</th><th>Turno</th><th>Total reservas</th></tr></thead>
                         <tbody id="reporte-distribucion"></tbody>
@@ -646,9 +655,12 @@
 
     </div>
 
+    <div id="toast-container" aria-live="polite"></div>
+
     <footer>
         <p>API: <code>/docs</code> · UI: <code>/ui</code></p>
     </footer>
+    </div>
 
     <script src="/static/app.js"></script>
 </body>
