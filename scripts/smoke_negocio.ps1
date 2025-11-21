@@ -6,6 +6,20 @@ $base      = $BaseUrl
 $ciAlumno  = "41234567"   # Matihas (grado)
 $ciDocente = "59876543"   # Ada (docente posgrado)
 
+# Idempotencia: limpiar huellas de ejecuciones previas en las fechas de prueba
+$fechasSmoke = @(
+    "2030-01-10", "2030-01-11", "2030-01-12", # límite diario + sanción
+    "2030-02-12", "2030-02-13", "2030-02-14", "2030-02-15", # límite semanal
+    "2030-03-01", "2030-03-02" # rol vs sala posgrado
+)
+$bodyClean = @{ participantes = @($ciAlumno, $ciDocente); fechas = $fechasSmoke } | ConvertTo-Json
+try {
+    Write-Host "[0] Limpiando datos de smoke (reservas/sanciones de pruebas)" -ForegroundColor Yellow
+    Invoke-RestMethod "$base/admin/limpiar-smoke" -Method POST -ContentType "application/json" -Body $bodyClean | Out-Null
+} catch {
+    Write-Warning "No se pudo limpiar datos de smoke. Verificar que la API esté levantada. Detalle: $($_.Exception.Message)"
+}
+
 # Fechas pensadas para estar lejos de los seeds
 $fechaLibre = "2030-01-10"
 $fechaSanc1 = "2030-01-11"
@@ -155,6 +169,45 @@ try {
     Write-Host "¡¡OJO!! La 4ª reserva se creó y NO debería si la regla semanal está activa."
 } catch {
     Write-Host "4ª reserva rechazada como se esperaba (límite semanal)."
+}
+
+Write-Host "`n[5] Rol vs tipo de sala (exclusivas)"
+
+$fechaPos1 = "2030-03-01"
+$fechaPos2 = "2030-03-02"
+
+$bodyRol1 = @{
+    nombre_sala   = "Sala P1"
+    edificio      = "Campus Pocitos"
+    fecha         = $fechaPos1
+    id_turno      = 12
+    participantes = @($ciAlumno)
+} | ConvertTo-Json -Depth 5
+
+$bodyRol2 = @{
+    nombre_sala   = "Sala P1"
+    edificio      = "Campus Pocitos"
+    fecha         = $fechaPos2
+    id_turno      = 13
+    participantes = @($ciDocente)
+} | ConvertTo-Json -Depth 5
+
+Write-Host "`n[5.1] Alumno de grado en sala posgrado (debe FALLAR)"
+try {
+    Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyRol1 -ErrorAction Stop | Out-Null
+    Write-Host "¡¡OJO!! La reserva de alumno en sala posgrado se creó y NO debería."
+} catch {
+    Write-Host "Reserva rechazada como se esperaba por rol no apto (sala posgrado)."
+    $_.ErrorDetails.Message
+}
+
+Write-Host "`n[5.2] Docente/posgrado en sala posgrado (debe PASAR)"
+try {
+    $rolOk = Invoke-RestMethod "$base/reservas" -Method POST -ContentType "application/json" -Body $bodyRol2 -ErrorAction Stop
+    $rolOk
+} catch {
+    Write-Host "¡¡OJO!! No se pudo reservar sala posgrado con docente/posgrado apto."
+    $_.ErrorDetails.Message
 }
 
 Write-Host "`n== Smoke negocio BD1 terminado =="

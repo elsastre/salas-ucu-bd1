@@ -1207,6 +1207,16 @@ class TurnoDisponibilidad(BaseModel):
     estado_reserva: str | None = None
 
 
+class LimpiarSmokeIn(BaseModel):
+    participantes: List[str] = Field(default_factory=list)
+    fechas: List[date] = Field(default_factory=list)
+
+    @field_validator("participantes")
+    @classmethod
+    def _val_cis(cls, v):
+        return normalize_ci_list(v)
+
+
 @app.get("/disponibilidad", response_model=List[TurnoDisponibilidad])
 def disponibilidad(
     fecha: date,
@@ -1281,6 +1291,81 @@ def disponibilidad(
             status_code=500,
             detail=f"Error consultando disponibilidad: {e}",
         )
+    finally:
+        conn.close()
+
+
+# ==========================
+#  UTILIDADES PARA SMOKE/DEMO
+# ==========================
+
+
+@app.post("/admin/limpiar-smoke")
+def limpiar_smoke(payload: LimpiarSmokeIn):
+    """Elimina reservas y sanciones de pruebas para garantizar idempotencia.
+
+    Está pensada para ser llamada por scripts de smoke antes de ejecutar
+    sus pruebas, de forma que las reglas de negocio (límite diario/semanal,
+    sanciones, etc.) no se vean afectadas por residuos de corridas previas.
+    """
+
+    if not payload.participantes and not payload.fechas:
+        return {"detail": "Nada para limpiar"}
+
+    conn = get_reservas_connection()
+    try:
+        cur = conn.cursor()
+
+        fechas = tuple(sorted(set(payload.fechas)))
+        participantes = tuple(sorted(set(payload.participantes)))
+
+        reserva_ids: list[int] = []
+        if fechas and participantes:
+            placeholders_fechas = ",".join(["%s"] * len(fechas))
+            placeholders_cis = ",".join(["%s"] * len(participantes))
+            cur.execute(
+                f"""
+                SELECT DISTINCT r.id_reserva
+                FROM reserva r
+                JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+                WHERE r.fecha IN ({placeholders_fechas})
+                  AND rp.ci_participante IN ({placeholders_cis})
+                """,
+                (*fechas, *participantes),
+            )
+            reserva_ids = [row[0] for row in cur.fetchall()]
+
+        if reserva_ids:
+            placeholders_ids = ",".join(["%s"] * len(reserva_ids))
+            cur.execute(
+                f"DELETE FROM reserva_participante WHERE id_reserva IN ({placeholders_ids})",
+                tuple(reserva_ids),
+            )
+            cur.execute(
+                f"DELETE FROM reserva WHERE id_reserva IN ({placeholders_ids})",
+                tuple(reserva_ids),
+            )
+
+        if participantes and fechas:
+            cur.execute(
+                f"""
+                DELETE FROM sancion_participante
+                WHERE ci_participante IN ({','.join(['%s']*len(participantes))})
+                  AND fecha_inicio IN ({','.join(['%s']*len(fechas))})
+                """,
+                (*participantes, *fechas),
+            )
+
+        conn.commit()
+        return {
+            "detail": "Datos de smoke limpiados",
+            "participantes": list(participantes),
+            "fechas": [str(f) for f in fechas],
+            "reservas_eliminadas": reserva_ids,
+        }
+    except mysql.connector.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error limpiando datos de smoke: {e}")
     finally:
         conn.close()
 
