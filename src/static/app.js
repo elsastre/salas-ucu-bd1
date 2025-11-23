@@ -665,14 +665,15 @@ const reservasUI = (() => {
     items.forEach((r) => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
       const horaLabel = turnoLabel(r.id_turno);
+      const estado = (r.estado || '').toString().toUpperCase();
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="numeric">${r.id_reserva}</td>
         <td>${r.edificio}</td>
         <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
-        <td>${horaLabel}</td>
-        <td>${estadoBadge(r.estado)}</td>
+        <td class="numeric">${r.id_turno}<div class="muted">${horaLabel}</div></td>
+        <td>${estadoBadge(estado)}</td>
         <td class="wrap">${participantes.join(', ') || '—'}</td>
         <td>
           <div class="table-actions tight">

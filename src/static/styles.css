@@ -237,12 +237,12 @@ table {
 
 .reservas-table {
   table-layout: fixed;
-  min-width: 720px;
+  min-width: 640px;
 }
 
 th,
 td {
-  padding: 0.65rem 0.75rem;
+  padding: 0.55rem 0.6rem;
   border-bottom: 1px solid #e2e8f0;
   text-align: left;
   font-size: 0.95rem;
@@ -250,12 +250,19 @@ td {
 
 .reservas-table th,
 .reservas-table td {
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.4rem;
 }
 
 .reservas-table td.wrap {
   white-space: normal;
   word-break: break-word;
+}
+
+.reservas-table td .muted {
+  display: block;
+  color: #475569;
+  font-size: 0.8rem;
+  margin-top: 2px;
 }
 
 th {

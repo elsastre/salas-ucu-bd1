@@ -9,20 +9,15 @@ Clona el repo y ejecuta el script de arranque (Windows):
 ```powershell
 git clone https://github.com/elsastre/salas-ucu-bd1.git
 cd salas-ucu-bd1
-run.bat --reset-db
+run.bat --reset-db   # opcional, recrea la BD y aplica el seed demo
 ```
 
-El script verifica que Docker esté disponible, recrea los volúmenes (aplica siempre `seed_demo.sql` sobre una BD limpia) y corre `docker compose up -d --build`.
-
-URLs por defecto (se respetan las variables `API_PORT` y `DB_PORT` de tu `.env` si existen):
+El script verifica que Docker esté disponible, levanta `docker compose up -d --build`, lee `API_PORT` desde `.env` (o usa 8000) y abre automáticamente las URLs clave:
 - UI: http://localhost:%API_PORT%/ui
 - Docs: http://localhost:%API_PORT%/docs
 - Adminer: http://localhost:8080
 
-Para relanzar sin recrear la BD demo usa:
-```powershell
-run.bat
-```
+Cuando solo necesites arrancar contenedores sin borrar el volumen de la BD demo usa simplemente `run.bat`.
 
 ## Cómo correr (local)
 ```powershell
@@ -59,7 +54,7 @@ docker compose up -d --build
 docker compose down --volumes
 docker compose up -d --build
 ```
-También puedes usar el helper `scripts/reset_demo.sh` para automatizar estos pasos.
+También puedes usar `run.bat --reset-db` o el helper `scripts/reset_demo.sh` para automatizar estos pasos.
 
 ### Windows (un solo paso)
 Ejecuta `run.bat` en la raíz del repo (opcionalmente con `--reset-db` para recrear los volúmenes y aplicar el seed demo):
@@ -71,8 +66,8 @@ Las variables `API_PORT` y `DB_PORT` pueden declararse en `.env` para personaliz
 
 ## Seed de demostración
 
-- El volumen `./sql` solo ejecuta `00_schema.sql` y `seed_demo.sql`, que pobló ~100 participantes, ~100 salas repartidas en 5 edificios, 15 turnos de 08:00 a 23:00, ~100 reservas con estados variados y un set de sanciones activas/expiradas.
-- Los archivos `seed.sql` y `seed2.sql` se dejaron vacíos para evitar cargas duplicadas.
+- El contenedor de MySQL monta únicamente `00_schema.sql` y `seed_demo.sql`. Al recrear la BD verás ~100 participantes, ~100 salas, los 15 turnos horarios de 08:00 a 23:00 y un set de reservas/sanciones de demostración.
+- Los seeds legacy siguen en `sql/legacy/` para referencia histórica, pero ya no se ejecutan.
 
 ## Scripts de profesor (alternativa)
 ```powershell
