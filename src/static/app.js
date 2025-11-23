@@ -1,4 +1,4 @@
-const apiBase = '';
+const apiBase = window.location?.origin || '';
 const qs = (sel) => document.querySelector(sel);
 const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -1290,7 +1290,7 @@ async function handleLogin(evt) {
       submitBtn.disabled = true;
       submitBtn.textContent = 'Ingresando...';
     }
-    const user = await apiRequest('GET', `${apiBase}/participantes/${normalizedCi}`, null, msg);
+    const user = await apiRequest('POST', `${apiBase}/auth/login`, { ci: normalizedCi }, msg);
     sessionManager.save(user);
     setAlert(msg, 'Sesión iniciada correctamente', 'success');
     const loginCard = qs('#loginCard') || qs('#login-card');
@@ -1301,6 +1301,8 @@ async function handleLogin(evt) {
   } catch (err) {
     if (err?.status === 404) {
       setAlert(msg, 'No se encontró un participante con esa CI', 'error');
+    } else if (err?.status === 422) {
+      setAlert(msg, 'Formato de CI inválido. Revisa los dígitos ingresados.', 'error');
     } else {
       setAlert(msg, 'Ocurrió un error al iniciar sesión. Intenta más tarde.', 'error');
     }
