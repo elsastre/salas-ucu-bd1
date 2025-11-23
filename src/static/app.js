@@ -1167,7 +1167,7 @@ function setTodayDefaults() {
 }
 
 function updateSessionUI() {
-  const shell = qs('#mainTabs') || qs('#app-shell');
+  const shell = qs('#app-shell') || qs('#mainTabs');
   const loginCard = qs('#loginCard') || qs('#login-card');
   const sessionCard = qs('#session-card');
   const info = qs('#session-info');
@@ -1298,7 +1298,7 @@ async function handleLogin(evt) {
     sessionManager.save(user);
     setAlert(msg, 'Sesión iniciada correctamente', 'success');
     const loginCard = qs('#loginCard') || qs('#login-card');
-    const shell = qs('#mainTabs') || qs('#app-shell');
+    const shell = qs('#app-shell') || qs('#mainTabs');
     if (loginCard) loginCard.style.display = 'none';
     if (shell) shell.style.display = 'block';
     await startApp();
