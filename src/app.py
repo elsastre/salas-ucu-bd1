@@ -425,6 +425,20 @@ class SancionUpdate(BaseModel):
             raise ValueError("fecha_fin es requerida")
         return v
 
+
+class SancionOut(SancionBase):
+    ci_sancionado: str = Field(
+        ...,
+        validation_alias=AliasChoices("ci_sancionado", "ci", "ci_participante"),
+        serialization_alias="ci_sancionado",
+        description="CI del participante sancionado (alias redundante para frontend)",
+    )
+
+    @field_validator("ci_sancionado")
+    @classmethod
+    def _val_ci_sancionado(cls, v):
+        return normalize_ci(v)
+
 # --------- HEALTH ---------
 @app.get("/health")
 def health():
@@ -544,6 +558,9 @@ def list_reservas(
     edificio: str | None = None,
     nombre_sala: str | None = None,
     id_turno: int | None = None,
+    ci: str | None = Query(None, description="CI del participante de la reserva"),
+    limit: int | None = Query(None, ge=1, le=500, description="Cantidad de filas a devolver"),
+    offset: int | None = Query(None, ge=0, description="Desplazamiento para paginación"),
 ):
     """
     Devuelve las reservas de la tabla 'reserva'.
@@ -580,10 +597,32 @@ def list_reservas(
             FROM reserva r
             LEFT JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
         """
+        if ci:
+            conds.append(
+                "EXISTS (SELECT 1 FROM reserva_participante rp2 WHERE rp2.id_reserva = r.id_reserva AND rp2.ci_participante = %s)"
+            )
+            params.append(normalize_ci(ci))
+
         if conds:
             sql += " WHERE " + " AND ".join(conds)
         sql += " GROUP BY r.id_reserva, r.nombre_sala, r.edificio, r.fecha, r.id_turno, r.estado"
-        sql += " ORDER BY r.fecha, r.edificio, r.nombre_sala, r.id_turno"
+        order_clause = (
+            "r.fecha DESC, r.id_turno DESC, r.edificio, r.nombre_sala"
+            if ci
+            else "r.fecha, r.id_turno, r.edificio, r.nombre_sala"
+        )
+        sql += f" ORDER BY {order_clause}"
+
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+            if offset is not None:
+                sql += " OFFSET %s"
+                params.append(offset)
+        elif offset is not None:
+            # Aplicar offset sin perder filas: LIMIT máximo permitido por MySQL
+            sql += " LIMIT 18446744073709551615 OFFSET %s"
+            params.append(offset)
 
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
@@ -900,10 +939,18 @@ def create_reserva(payload: ReservaIn):
                   ON t.id_turno = r.id_turno
                 WHERE rp.ci_participante = %s
                   AND r.fecha = %s
+                  AND r.nombre_sala = %s
+                  AND r.edificio = %s
                   AND r.estado IN ({placeholders_estados})
                   AND s.tipo_sala = 'libre'
                 """,
-                (ci, payload.fecha, *ESTADOS_OCUPAN_DIA),
+                (
+                    ci,
+                    payload.fecha,
+                    payload.nombre_sala,
+                    payload.edificio,
+                    *ESTADOS_OCUPAN_DIA,
+                ),
             )
             row = cur.fetchone()
             return float(row["horas"]) if row else 0.0
@@ -1156,6 +1203,55 @@ class ReservaEstadoIn(BaseModel):
 
 ALLOWED_ESTADOS_RESERVA = {"activa", "cancelada", "sin_asistencia", "finalizada"}
 
+
+def crear_sanciones_por_ausencia(
+    conn: mysql.connector.MySQLConnection,
+    id_reserva: int,
+    presentes: set[str] | None = None,
+) -> int:
+    """Crea sanciones de 2 meses para los participantes ausentes de la reserva.
+
+    - Usa la fecha de la propia reserva como inicio de la sanción.
+    - Evita sancionar a participantes declarados como presentes.
+    - Inserta con INSERT IGNORE para no duplicar sanciones idénticas.
+    """
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT r.fecha, rp.ci_participante
+            FROM reserva r
+            JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+            WHERE r.id_reserva = %s
+            """,
+            (id_reserva,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=400,
+                detail="La reserva no tiene participantes; no se pueden generar sanciones.",
+            )
+
+        fecha_reserva = rows[0]["fecha"]
+        presentes_set = set(presentes or [])
+        ausentes = [row["ci_participante"] for row in rows if row["ci_participante"] not in presentes_set]
+
+        if not ausentes:
+            return 0
+
+        cur.executemany(
+            """
+            INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
+            VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
+            """,
+            [(ci, fecha_reserva, fecha_reserva) for ci in ausentes],
+        )
+        return cur.rowcount
+    finally:
+        cur.close()
+
 @app.patch("/reservas/{id_reserva}", response_model=ReservaOut)
 def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
     """
@@ -1200,6 +1296,10 @@ def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
             "UPDATE reserva SET estado = %s WHERE id_reserva = %s",
             (estado, id_reserva),
         )
+
+        if estado == "sin_asistencia" and row.get("estado") != "sin_asistencia":
+            crear_sanciones_por_ausencia(conn, id_reserva)
+
         conn.commit()
 
         # 3) Devolver la reserva actualizada
@@ -1306,14 +1406,8 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
         )
 
         # 6) Sancionar ausentes según configuración (2 meses)
-        if payload.sancionar_ausentes and ausentes:
-            cur.executemany(
-                """
-                INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
-                VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
-                """,
-                [(ci, reserva["fecha"], reserva["fecha"]) for ci in ausentes],
-            )
+        if payload.sancionar_ausentes:
+            crear_sanciones_por_ausencia(conn, id_reserva, presentes)
 
         conn.commit()
 
@@ -1816,7 +1910,7 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
 # ==========================
 
 
-@app.get("/sanciones", response_model=List[SancionBase])
+@app.get("/sanciones", response_model=List[SancionOut])
 def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI")):
     """
     Devuelve sanciones vigentes o históricas de participantes.
@@ -1825,29 +1919,28 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
     conn = get_conn()
     try:
         cur = conn.cursor(dictionary=True)
+        params: list[Any] = []
+        base_query = """
+            SELECT ci_participante AS ci_sancionado,
+                   ci_participante AS ci,
+                   fecha_inicio,
+                   fecha_fin
+            FROM sancion_participante
+        """
+
         if ci:
             ci = normalize_ci(ci)
-            cur.execute(
-                """
-                SELECT ci_participante, fecha_inicio, fecha_fin
-                FROM sancion_participante
-                WHERE ci_participante = %s
-                ORDER BY fecha_inicio DESC
-                """,
-                (ci,),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT ci_participante, fecha_inicio, fecha_fin
-                FROM sancion_participante
-                ORDER BY fecha_inicio DESC
-                """
-            )
+            base_query += " WHERE ci_participante = %s"
+            params.append(ci)
+
+        base_query += " ORDER BY fecha_inicio DESC"
+
+        cur.execute(base_query, tuple(params))
         rows = cur.fetchall()
         return [
             {
-                "ci": row["ci_participante"],
+                "ci": row["ci"],
+                "ci_sancionado": row["ci_sancionado"],
                 "fecha_inicio": row["fecha_inicio"],
                 "fecha_fin": row["fecha_fin"],
             }
@@ -1859,7 +1952,7 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
         conn.close()
 
 
-@app.post("/sanciones", response_model=SancionBase, status_code=201)
+@app.post("/sanciones", response_model=SancionOut, status_code=201)
 def crear_sancion(payload: SancionCreate):
     """Crea una sanción manual para un participante."""
 
@@ -1874,7 +1967,12 @@ def crear_sancion(payload: SancionCreate):
             (payload.ci, payload.fecha_inicio, payload.fecha_fin),
         )
         conn.commit()
-        return payload.model_dump(by_alias=True)
+        return {
+            "ci": payload.ci,
+            "ci_sancionado": payload.ci,
+            "fecha_inicio": payload.fecha_inicio,
+            "fecha_fin": payload.fecha_fin,
+        }
     except mysql.connector.Error as e:
         if e.errno == 1452:
             raise HTTPException(
@@ -1891,7 +1989,7 @@ def crear_sancion(payload: SancionCreate):
         conn.close()
 
 
-@app.put("/sanciones/{ci}/{fecha_inicio}", response_model=SancionBase)
+@app.put("/sanciones/{ci}/{fecha_inicio}", response_model=SancionOut)
 def actualizar_sancion(
     ci: str = Path(..., description="CI del participante"),
     fecha_inicio: date = Path(..., description="Fecha de inicio original"),
@@ -1931,6 +2029,7 @@ def actualizar_sancion(
 
         return {
             "ci": ci,
+            "ci_sancionado": ci,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": payload.fecha_fin,
         }
