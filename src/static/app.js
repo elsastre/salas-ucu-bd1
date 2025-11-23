@@ -615,12 +615,30 @@ const reservasUI = (() => {
     return ALLOWED_ESTADOS.includes(est) ? est : 'activa';
   }
 
+  function turnoLabel(id) {
+    const turno = state.turnos.find((t) => Number(t.id_turno) === Number(id));
+    return turno ? `${turno.hora_inicio} - ${turno.hora_fin}` : `Turno ${id}`;
+  }
+
+  function estadoBadge(estado) {
+    const tone = {
+      activa: 'success',
+      finalizada: 'neutral',
+      sin_asistencia: 'warn',
+      cancelada: 'danger',
+    }[estado] || 'neutral';
+    return `<span class="badge ${tone}">${estado}</span>`;
+  }
+
   async function list() {
     const msg = qs('#reservas-msg');
     try {
       requireLogin(msg);
     } catch (_) {
-      return tablePlaceholder(qs('#reservas-table'), 'Inicia sesión para ver reservas');
+      tablePlaceholder(qs('#reservas-table'), 'Inicia sesión para ver reservas');
+      const count = qs('#reservas-count');
+      if (count) count.textContent = 'Mostrando 0 de 0 reservas.';
+      return;
     }
     const fecha = qs('#reservas-filtro-fecha').value;
     const edificio = qs('#reservas-filtro-edificio').value;
@@ -628,28 +646,38 @@ const reservasUI = (() => {
     const params = new URLSearchParams();
     if (fecha) params.append('fecha', fecha);
     if (edificio) params.append('edificio', edificio);
+    if (!sessionManager.isAdmin() && sessionManager.currentUser?.ci) {
+      params.append('ci', sessionManager.currentUser.ci);
+    }
     const url = `${apiBase}/reservas${params.toString() ? `?${params.toString()}` : ''}`;
     const data = await apiRequest('GET', url, null, qs('#reservas-msg'));
     const rows = (data || []).filter((r) => !estado || r.estado === estado);
-    render(rows);
+    render(rows, data?.length || 0);
   }
 
-  function render(items) {
+  function render(items, total = 0) {
     const tbody = qs('#reservas-table');
-    if (!items.length) return tablePlaceholder(tbody, 'Sin reservas');
+    const count = qs('#reservas-count');
+    if (!items.length) {
+      tablePlaceholder(tbody, 'Sin reservas');
+      if (count) count.textContent = `Mostrando 0 de ${total || 0} reservas.`;
+      return;
+    }
     tbody.innerHTML = '';
     items.forEach((r) => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
+      const salaLabel = `${r.edificio} · ${r.nombre_sala}`;
+      const horaLabel = turnoLabel(r.id_turno);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="numeric">${r.id_reserva}</td>
-        <td>${r.edificio} · ${r.nombre_sala}</td>
-        <td>${r.fecha}</td>
-        <td class="numeric">${r.id_turno}</td>
-        <td><span class="badge ${r.estado === 'activa' ? 'success' : ''}">${r.estado}</span></td>
+        <td>${salaLabel}</td>
         <td>${participantes.join(', ') || '—'}</td>
+        <td>${r.fecha}</td>
+        <td>${horaLabel}</td>
+        <td>${estadoBadge(r.estado)}</td>
         <td>
           <div class="table-actions">
+            <small class="muted">#${r.id_reserva}</small>
             <select data-reserva="${r.id_reserva}" class="estado-select">
               ${ALLOWED_ESTADOS
                 .map((e) => `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${e}</option>`)
@@ -660,6 +688,8 @@ const reservasUI = (() => {
         </td>`;
       tbody.appendChild(tr);
     });
+
+    if (count) count.textContent = `Mostrando ${items.length} de ${total || items.length} reservas.`;
   }
 
   async function submit(evt) {
@@ -733,6 +763,13 @@ const reservasUI = (() => {
 
   function init() {
     qs('#reservas-refresh').addEventListener('click', list);
+    qs('#reservas-ver-todas').addEventListener('click', (e) => {
+      e.preventDefault();
+      qs('#reservas-filtro-fecha').value = '';
+      qs('#reservas-filtro-edificio').value = '';
+      qs('#reservas-filtro-estado').value = '';
+      list();
+    });
     qs('#reservas-form').addEventListener('submit', submit);
     qs('#reservas-table').addEventListener('click', updateEstado);
     qs('#asistencia-form').addEventListener('submit', registrarAsistencia);
@@ -843,15 +880,17 @@ const sancionesUI = (() => {
     if (!items.length) return tablePlaceholder(tbody, 'Sin sanciones');
     tbody.innerHTML = '';
     items.forEach((s) => {
+      const ciRaw = s.ci_sancionado || s.ci_participante || s.ci || s.sancionado?.ci || '';
+      const ci = normalizeCi(ciRaw) || ciRaw;
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${s.ci_participante}</td>
+        <td>${ci}</td>
         <td>${s.fecha_inicio}</td>
         <td>${s.fecha_fin}</td>
         <td>
           <div class="table-actions">
-            <button class="btn link" data-action="edit" data-ci="${s.ci_participante}" data-inicio="${s.fecha_inicio}" data-fin="${s.fecha_fin}">Editar</button>
-            <button class="btn link" data-action="delete" data-ci="${s.ci_participante}" data-inicio="${s.fecha_inicio}">Eliminar</button>
+            <button class="btn link" data-action="edit" data-ci="${ci}" data-inicio="${s.fecha_inicio}" data-fin="${s.fecha_fin}">Editar</button>
+            <button class="btn link" data-action="delete" data-ci="${ci}" data-inicio="${s.fecha_inicio}">Eliminar</button>
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -914,8 +953,13 @@ const sancionesUI = (() => {
     }
     if (btn.dataset.action === 'delete') {
       if (!confirm('¿Eliminar sanción?')) return;
+      const normCi = normalizeCi(ci);
+      if (!normCi) {
+        setAlert(msg, 'Formato de CI inválido', 'error');
+        return;
+      }
       try {
-        await apiRequest('DELETE', `${apiBase}/sanciones/${encodeURIComponent(ci)}/${inicio}`, null, qs('#sanciones-msg'));
+        await apiRequest('DELETE', `${apiBase}/sanciones/${encodeURIComponent(normCi)}/${inicio}`, null, qs('#sanciones-msg'));
         await list();
       } catch (_) {}
     }
