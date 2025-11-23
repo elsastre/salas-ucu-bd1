@@ -23,14 +23,18 @@ function requestSubmit(form) {
   }
 }
 
+// Accepts boolean, numeric (1/0) or string ('1'/'0') admin flags and
+// also treats docentes/posgrado as admins.
 function computeIsAdmin(user) {
   if (!user) return false;
   if (typeof user.isAdmin === 'boolean') return user.isAdmin;
-  return (
-    user.es_admin === true ||
-    ['docente', 'posgrado'].includes(user.tipo_participante) ||
-    false
-  );
+
+  const byFlag =
+    user.es_admin === true || user.es_admin === 1 || user.es_admin === '1';
+  const tipo = (user.tipo_participante || '').toString().toLowerCase();
+  const byRole = ['docente', 'posgrado'].includes(tipo);
+
+  return byFlag || byRole;
 }
 
 const sessionManager = {
