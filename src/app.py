@@ -425,6 +425,20 @@ class SancionUpdate(BaseModel):
             raise ValueError("fecha_fin es requerida")
         return v
 
+
+class SancionOut(SancionBase):
+    ci_sancionado: str = Field(
+        ...,
+        validation_alias=AliasChoices("ci_sancionado", "ci", "ci_participante"),
+        serialization_alias="ci_sancionado",
+        description="CI del participante sancionado (alias redundante para frontend)",
+    )
+
+    @field_validator("ci_sancionado")
+    @classmethod
+    def _val_ci_sancionado(cls, v):
+        return normalize_ci(v)
+
 # --------- HEALTH ---------
 @app.get("/health")
 def health():
@@ -544,6 +558,9 @@ def list_reservas(
     edificio: str | None = None,
     nombre_sala: str | None = None,
     id_turno: int | None = None,
+    ci: str | None = Query(None, description="CI del participante de la reserva"),
+    limit: int | None = Query(None, ge=1, le=500, description="Cantidad de filas a devolver"),
+    offset: int | None = Query(None, ge=0, description="Desplazamiento para paginación"),
 ):
     """
     Devuelve las reservas de la tabla 'reserva'.
@@ -580,10 +597,27 @@ def list_reservas(
             FROM reserva r
             LEFT JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
         """
+        if ci:
+            conds.append(
+                "EXISTS (SELECT 1 FROM reserva_participante rp2 WHERE rp2.id_reserva = r.id_reserva AND rp2.ci_participante = %s)"
+            )
+            params.append(normalize_ci(ci))
+
         if conds:
             sql += " WHERE " + " AND ".join(conds)
         sql += " GROUP BY r.id_reserva, r.nombre_sala, r.edificio, r.fecha, r.id_turno, r.estado"
         sql += " ORDER BY r.fecha, r.edificio, r.nombre_sala, r.id_turno"
+
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+            if offset is not None:
+                sql += " OFFSET %s"
+                params.append(offset)
+        elif offset is not None:
+            # Aplicar offset sin perder filas: LIMIT máximo permitido por MySQL
+            sql += " LIMIT 18446744073709551615 OFFSET %s"
+            params.append(offset)
 
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
@@ -1816,7 +1850,7 @@ def eliminar_participante(ci: str = Path(..., description="CI del participante a
 # ==========================
 
 
-@app.get("/sanciones", response_model=List[SancionBase])
+@app.get("/sanciones", response_model=List[SancionOut])
 def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI")):
     """
     Devuelve sanciones vigentes o históricas de participantes.
@@ -1825,29 +1859,28 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
     conn = get_conn()
     try:
         cur = conn.cursor(dictionary=True)
+        params: list[Any] = []
+        base_query = """
+            SELECT ci_participante AS ci_sancionado,
+                   ci_participante AS ci,
+                   fecha_inicio,
+                   fecha_fin
+            FROM sancion_participante
+        """
+
         if ci:
             ci = normalize_ci(ci)
-            cur.execute(
-                """
-                SELECT ci_participante, fecha_inicio, fecha_fin
-                FROM sancion_participante
-                WHERE ci_participante = %s
-                ORDER BY fecha_inicio DESC
-                """,
-                (ci,),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT ci_participante, fecha_inicio, fecha_fin
-                FROM sancion_participante
-                ORDER BY fecha_inicio DESC
-                """
-            )
+            base_query += " WHERE ci_participante = %s"
+            params.append(ci)
+
+        base_query += " ORDER BY fecha_inicio DESC"
+
+        cur.execute(base_query, tuple(params))
         rows = cur.fetchall()
         return [
             {
-                "ci": row["ci_participante"],
+                "ci": row["ci"],
+                "ci_sancionado": row["ci_sancionado"],
                 "fecha_inicio": row["fecha_inicio"],
                 "fecha_fin": row["fecha_fin"],
             }
@@ -1859,7 +1892,7 @@ def listar_sanciones(ci: str | None = Query(None, description="Filtrar por CI"))
         conn.close()
 
 
-@app.post("/sanciones", response_model=SancionBase, status_code=201)
+@app.post("/sanciones", response_model=SancionOut, status_code=201)
 def crear_sancion(payload: SancionCreate):
     """Crea una sanción manual para un participante."""
 
@@ -1874,7 +1907,12 @@ def crear_sancion(payload: SancionCreate):
             (payload.ci, payload.fecha_inicio, payload.fecha_fin),
         )
         conn.commit()
-        return payload.model_dump(by_alias=True)
+        return {
+            "ci": payload.ci,
+            "ci_sancionado": payload.ci,
+            "fecha_inicio": payload.fecha_inicio,
+            "fecha_fin": payload.fecha_fin,
+        }
     except mysql.connector.Error as e:
         if e.errno == 1452:
             raise HTTPException(
@@ -1891,7 +1929,7 @@ def crear_sancion(payload: SancionCreate):
         conn.close()
 
 
-@app.put("/sanciones/{ci}/{fecha_inicio}", response_model=SancionBase)
+@app.put("/sanciones/{ci}/{fecha_inicio}", response_model=SancionOut)
 def actualizar_sancion(
     ci: str = Path(..., description="CI del participante"),
     fecha_inicio: date = Path(..., description="Fecha de inicio original"),
@@ -1931,6 +1969,7 @@ def actualizar_sancion(
 
         return {
             "ci": ci,
+            "ci_sancionado": ci,
             "fecha_inicio": fecha_inicio,
             "fecha_fin": payload.fecha_fin,
         }

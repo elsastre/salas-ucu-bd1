@@ -265,6 +265,7 @@
                         </select>
                     </label>
                     <button class="btn secondary" id="reservas-refresh">Actualizar</button>
+                    <button class="btn ghost" id="reservas-ver-todas">Ver todas</button>
                 </div>
             </div>
             <div class="grid two">
@@ -276,11 +277,12 @@
                     <div class="table-wrapper">
                         <table>
                             <thead>
-                                <tr><th>ID</th><th>Edificio / Sala</th><th>Fecha</th><th>Turno</th><th>Estado</th><th>Participantes</th><th>Acciones</th></tr>
+                                <tr><th>Sala</th><th>CI</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Acciones</th></tr>
                             </thead>
                             <tbody id="reservas-table"></tbody>
                         </table>
                     </div>
+                    <div class="table-meta" id="reservas-count"></div>
                     <div class="alert" id="reservas-msg"></div>
                 </div>
                 <div class="card">
