@@ -608,16 +608,13 @@ const reservasUI = (() => {
   }
 
   function estadoBadge(estado) {
-    const raw = (estado || '').toString();
-    const normalized = raw.toLowerCase();
-    const label = raw.toUpperCase();
     const tone = {
       activa: 'success',
       finalizada: 'neutral',
       sin_asistencia: 'warn',
       cancelada: 'danger',
-    }[normalized] || 'neutral';
-    return `<span class="badge ${tone}">${label}</span>`;
+    }[estado] || 'neutral';
+    return `<span class="badge ${tone}">${estado}</span>`;
   }
 
   async function list() {
@@ -656,18 +653,18 @@ const reservasUI = (() => {
     tbody.innerHTML = '';
     items.forEach((r) => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
+      const salaLabel = `${r.edificio} · ${r.nombre_sala}`;
       const horaLabel = turnoLabel(r.id_turno);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="numeric">${r.id_reserva}</td>
-        <td>${r.edificio}</td>
-        <td>${r.nombre_sala}</td>
+        <td>${salaLabel}</td>
+        <td>${participantes.join(', ') || '—'}</td>
         <td>${r.fecha}</td>
         <td>${horaLabel}</td>
         <td>${estadoBadge(r.estado)}</td>
-        <td>${participantes.join(', ') || '—'}</td>
         <td>
           <div class="table-actions">
+            <small class="muted">#${r.id_reserva}</small>
             <select data-reserva="${r.id_reserva}" class="estado-select">
               ${ALLOWED_ESTADOS
                 .map((e) => {
@@ -873,7 +870,7 @@ const sancionesUI = (() => {
     if (!items.length) return tablePlaceholder(tbody, 'Sin sanciones');
     tbody.innerHTML = '';
     items.forEach((s) => {
-      const ciRaw = s.ci ?? s.ci_participante ?? s.ci_sancionado ?? s.sancionado?.ci ?? '';
+      const ciRaw = s.ci_sancionado || s.ci_participante || s.ci || s.sancionado?.ci || '';
       const ci = normalizeCi(ciRaw) || ciRaw;
       const tr = document.createElement('tr');
       tr.innerHTML = `

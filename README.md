@@ -50,7 +50,6 @@ El script valida que Docker esté disponible, levanta `db`, `adminer` y `api`, e
 
 - El volumen `./sql` solo ejecuta `00_schema.sql` y `seed_demo.sql`, que pobló ~100 participantes, ~100 salas repartidas en 5 edificios, 10 turnos, ~100 reservas con estados variados y un set de sanciones activas/expiradas.
 - Los archivos `seed.sql` y `seed2.sql` se dejaron vacíos para evitar cargas duplicadas.
-- Para verificar que el seed está aplicado en un volumen limpio, deberías ver ~100 filas en `participante`/`sala`/`reserva` (ej.: `SELECT COUNT(*) FROM participante;`).
 
 ## Scripts de profesor (alternativa)
 ```powershell

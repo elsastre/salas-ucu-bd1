@@ -624,6 +624,17 @@ def list_reservas(
             sql += " LIMIT 18446744073709551615 OFFSET %s"
             params.append(offset)
 
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+            if offset is not None:
+                sql += " OFFSET %s"
+                params.append(offset)
+        elif offset is not None:
+            # Aplicar offset sin perder filas: LIMIT máximo permitido por MySQL
+            sql += " LIMIT 18446744073709551615 OFFSET %s"
+            params.append(offset)
+
         cur.execute(sql, tuple(params))
         rows = cur.fetchall()
         return rows
