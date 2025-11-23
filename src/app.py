@@ -1,14 +1,19 @@
-from fastapi import FastAPI, HTTPException, Path, Query, Header
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, field_validator
-from pydantic import AliasChoices
-from typing import List, Literal, Any
-import os, mysql.connector, re
+import logging
+import os
+import re
 from datetime import timedelta, date
 from pathlib import Path as FilePath
+from typing import Any, List, Literal
+
+import mysql.connector
+from fastapi import FastAPI, HTTPException, Header, Path, Query
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 app = FastAPI(title="UCU Salas - BD1", version="0.3.0")
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = FilePath(__file__).parent
 UI_TEMPLATE = BASE_DIR / "templates" / "ui.html"
@@ -1576,6 +1581,7 @@ def login(payload: LoginPayload):
         row = _fetch_participante(conn, ci)
         if not row:
             raise HTTPException(status_code=404, detail="Participante no encontrado")
+        logger.info("Login exitoso", extra={"ci": ci, "es_admin": row.get("es_admin")})
         return row
     finally:
         conn.close()
@@ -1590,6 +1596,7 @@ def auth_me(
     if ci is None:
         raise HTTPException(status_code=422, detail="Debe indicar CI")
     norm = normalize_ci(ci)
+    logger.info("Consulta /auth/me", extra={"ci": norm})
     conn = get_conn()
     try:
         row = _fetch_participante(conn, norm)
