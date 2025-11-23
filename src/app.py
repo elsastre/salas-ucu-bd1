@@ -606,7 +606,23 @@ def list_reservas(
         if conds:
             sql += " WHERE " + " AND ".join(conds)
         sql += " GROUP BY r.id_reserva, r.nombre_sala, r.edificio, r.fecha, r.id_turno, r.estado"
-        sql += " ORDER BY r.fecha, r.edificio, r.nombre_sala, r.id_turno"
+        order_clause = (
+            "r.fecha DESC, r.id_turno DESC, r.edificio, r.nombre_sala"
+            if ci
+            else "r.fecha, r.id_turno, r.edificio, r.nombre_sala"
+        )
+        sql += f" ORDER BY {order_clause}"
+
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+            if offset is not None:
+                sql += " OFFSET %s"
+                params.append(offset)
+        elif offset is not None:
+            # Aplicar offset sin perder filas: LIMIT máximo permitido por MySQL
+            sql += " LIMIT 18446744073709551615 OFFSET %s"
+            params.append(offset)
 
         if limit is not None:
             sql += " LIMIT %s"
@@ -1198,6 +1214,55 @@ class ReservaEstadoIn(BaseModel):
 
 ALLOWED_ESTADOS_RESERVA = {"activa", "cancelada", "sin_asistencia", "finalizada"}
 
+
+def crear_sanciones_por_ausencia(
+    conn: mysql.connector.MySQLConnection,
+    id_reserva: int,
+    presentes: set[str] | None = None,
+) -> int:
+    """Crea sanciones de 2 meses para los participantes ausentes de la reserva.
+
+    - Usa la fecha de la propia reserva como inicio de la sanción.
+    - Evita sancionar a participantes declarados como presentes.
+    - Inserta con INSERT IGNORE para no duplicar sanciones idénticas.
+    """
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT r.fecha, rp.ci_participante
+            FROM reserva r
+            JOIN reserva_participante rp ON rp.id_reserva = r.id_reserva
+            WHERE r.id_reserva = %s
+            """,
+            (id_reserva,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            raise HTTPException(
+                status_code=400,
+                detail="La reserva no tiene participantes; no se pueden generar sanciones.",
+            )
+
+        fecha_reserva = rows[0]["fecha"]
+        presentes_set = set(presentes or [])
+        ausentes = [row["ci_participante"] for row in rows if row["ci_participante"] not in presentes_set]
+
+        if not ausentes:
+            return 0
+
+        cur.executemany(
+            """
+            INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
+            VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
+            """,
+            [(ci, fecha_reserva, fecha_reserva) for ci in ausentes],
+        )
+        return cur.rowcount
+    finally:
+        cur.close()
+
 @app.patch("/reservas/{id_reserva}", response_model=ReservaOut)
 def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
     """
@@ -1242,6 +1307,10 @@ def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
             "UPDATE reserva SET estado = %s WHERE id_reserva = %s",
             (estado, id_reserva),
         )
+
+        if estado == "sin_asistencia" and row.get("estado") != "sin_asistencia":
+            crear_sanciones_por_ausencia(conn, id_reserva)
+
         conn.commit()
 
         # 3) Devolver la reserva actualizada
@@ -1348,14 +1417,8 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
         )
 
         # 6) Sancionar ausentes según configuración (2 meses)
-        if payload.sancionar_ausentes and ausentes:
-            cur.executemany(
-                """
-                INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
-                VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
-                """,
-                [(ci, reserva["fecha"], reserva["fecha"]) for ci in ausentes],
-            )
+        if payload.sancionar_ausentes:
+            crear_sanciones_por_ausencia(conn, id_reserva, presentes)
 
         conn.commit()
 

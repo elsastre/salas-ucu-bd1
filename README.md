@@ -16,7 +16,7 @@ Copy-Item .env.example .env
 
 # 4) Crear BD y datos en MySQL
 #   SOURCE ./sql/00_schema.sql;
-#   SOURCE ./sql/seed.sql;
+#   SOURCE ./sql/seed_demo.sql;
 
 # 5) Levantar API
 uvicorn src.app:app --host 127.0.0.1 --port 8000
@@ -38,6 +38,11 @@ Ejecuta `run.bat` en la raíz del repo:
 run.bat
 ```
 El script valida que Docker esté disponible, levanta `db`, `adminer` y `api`, espera el `/health` y abre automáticamente `/docs` y `/ui`.
+
+## Seed de demostración
+
+- El volumen `./sql` solo ejecuta `00_schema.sql` y `seed_demo.sql`, que pobló ~100 participantes, ~100 salas repartidas en 5 edificios, 10 turnos, ~100 reservas con estados variados y un set de sanciones activas/expiradas.
+- Los archivos `seed.sql` y `seed2.sql` se dejaron vacíos para evitar cargas duplicadas.
 
 ## Scripts de profesor (alternativa)
 ```powershell
@@ -77,13 +82,9 @@ El script `prof-check.ps1` ya cuenta con el flag `-Clean` para hacer `docker com
 
 ## Login lógico y roles
 
-- El panel `/ui` ahora pide iniciar sesión con la CI de un participante (sin contraseña). El backend expone `/auth/login` para validar
-  la existencia y devolver `es_admin`.
-- La UI guarda la sesión en `localStorage` y bloquea todas las pestañas hasta loguearse. El encabezado muestra el nombre, rol y si el
-  usuario es admin.
-- Solo administradores pueden crear/editar/eliminar salas, participantes, turnos y sanciones manuales. Los botones quedan deshabilita-
-  dos y, si se fuerzan, aparece el mensaje “Solo administradores pueden realizar esta acción”.
-- Para pruebas rápidas hay un admin por defecto (CI `59876543`).
+- El panel `/ui` pide iniciar sesión con la CI de un participante (sin contraseña) y **no** persiste sesión entre recargas. El backend expone `/auth/login` para validar la existencia y devolver `es_admin`.
+- Solo administradores pueden crear/editar/eliminar salas, participantes, turnos y sanciones manuales. Los botones quedan deshabilitados y, si se fuerzan, aparece el mensaje “Solo administradores pueden realizar esta acción”.
+- CI útiles del seed: admin/docente `59876543`, admin `50000001`, estudiante típico `40000001`. Salas de ejemplo: `Sala A-001` (Sede Central, libre), `Sala B-010` (Campus Pocitos), `Sala C-005` (Campus Norte).
 
 ## Reportes cubiertos
 
