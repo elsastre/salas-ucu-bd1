@@ -259,6 +259,16 @@ tr:hover td {
   background: #f9fbff;
 }
 
+tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+.table-meta {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
 .numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
