@@ -934,10 +934,18 @@ def create_reserva(payload: ReservaIn):
                   ON t.id_turno = r.id_turno
                 WHERE rp.ci_participante = %s
                   AND r.fecha = %s
+                  AND r.nombre_sala = %s
+                  AND r.edificio = %s
                   AND r.estado IN ({placeholders_estados})
                   AND s.tipo_sala = 'libre'
                 """,
-                (ci, payload.fecha, *ESTADOS_OCUPAN_DIA),
+                (
+                    ci,
+                    payload.fecha,
+                    payload.nombre_sala,
+                    payload.edificio,
+                    *ESTADOS_OCUPAN_DIA,
+                ),
             )
             row = cur.fetchone()
             return float(row["horas"]) if row else 0.0

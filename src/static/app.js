@@ -39,30 +39,15 @@ function computeIsAdmin(user) {
 
 const sessionManager = {
   currentUser: null,
-  loadFromStorage() {
-    try {
-      const raw = localStorage.getItem('currentUser');
-      if (raw) {
-        const stored = JSON.parse(raw);
-        stored.isAdmin = computeIsAdmin(stored);
-        this.currentUser = stored;
-        window.currentUser = this.currentUser;
-      }
-    } catch (_) {
-      /* noop */
-    }
-  },
   save(user) {
     const enriched = { ...user, isAdmin: computeIsAdmin(user) };
     this.currentUser = enriched;
     window.currentUser = enriched;
-    localStorage.setItem('currentUser', JSON.stringify(enriched));
     updateSessionUI();
   },
   clear() {
     this.currentUser = null;
     window.currentUser = null;
-    localStorage.removeItem('currentUser');
     updateSessionUI();
   },
   isAdmin() {
@@ -286,11 +271,12 @@ const salasUI = (() => {
             <button class="btn link" data-action="delete" data-edificio="${s.edificio}" data-nombre="${s.nombre_sala}">Eliminar</button>
           </div>`
         : '<span class="muted">Solo administradores</span>';
+      const tipo = (s.tipo_sala || '').toString().toUpperCase();
       tr.innerHTML = `
         <td>${s.edificio}</td>
         <td>${s.nombre_sala}</td>
         <td class="numeric">${s.capacidad}</td>
-        <td><span class="badge">${s.tipo_sala}</span></td>
+        <td><span class="badge">${tipo}</span></td>
         <td>${actions}</td>`;
       tbody.appendChild(tr);
     });
@@ -683,7 +669,7 @@ const reservasUI = (() => {
                 .map((e) => `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${e}</option>`)
                 .join('')}
             </select>
-            <button class="btn link" data-action="estado" data-id="${r.id_reserva}">Guardar estado</button>
+            <button class="btn link" data-action="estado" data-id="${r.id_reserva}">GUARDAR ESTADO</button>
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -1367,7 +1353,7 @@ let bootstrapStarted = false;
 function bootstrap() {
   if (bootstrapStarted) return;
   bootstrapStarted = true;
-  sessionManager.loadFromStorage();
+  sessionManager.clear();
   updateSessionUI();
   const loginForm = document.getElementById('frmLogin') || qs('#login-form');
   const loginInput = document.getElementById('ciLogin') || qs('#login-ci');
@@ -1384,9 +1370,6 @@ function bootstrap() {
     sessionManager.clear();
     updateSessionUI();
   });
-  if (sessionManager.currentUser) {
-    startApp();
-  }
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootstrap);
