@@ -32,6 +32,13 @@ docker compose up -d --build
 - API: http://127.0.0.1:${API_PORT:-8000}/docs y /ui
 - Adminer: http://127.0.0.1:8080 (Servidor=db, user=root, pass=root, base=salas_db)
 
+**Importante:** si ya habías levantado la base y quieres resembrar con `seed_demo.sql`, resetea el volumen antes de iniciar:
+```bash
+docker compose down --volumes
+docker compose up -d --build
+```
+También puedes usar el helper `scripts/reset_demo.sh` para automatizar estos pasos.
+
 ### Windows (un solo paso)
 Ejecuta `run.bat` en la raíz del repo:
 ```

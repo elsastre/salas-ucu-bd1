@@ -404,10 +404,11 @@ const participantesUI = (() => {
             <button class="btn link" data-action="delete" data-ci="${p.ci}">Eliminar</button>
           </div>`
         : '<span class="muted">Solo administradores</span>';
+      const tipo = (p.tipo_participante || '—').toString().toUpperCase();
       tr.innerHTML = `
         <td>${p.ci}</td>
         <td>${p.apellido}, ${p.nombre}</td>
-        <td><span class="badge neutral">${p.tipo_participante || '—'}</span></td>
+        <td><span class="badge neutral">${tipo}</span></td>
         <td>${p.email}</td>
         <td>${actions}</td>`;
       tbody.appendChild(tr);
@@ -666,7 +667,10 @@ const reservasUI = (() => {
             <small class="muted">#${r.id_reserva}</small>
             <select data-reserva="${r.id_reserva}" class="estado-select">
               ${ALLOWED_ESTADOS
-                .map((e) => `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${e}</option>`)
+                .map((e) => {
+                  const label = (e || '').toString().toUpperCase();
+                  return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
+                })
                 .join('')}
             </select>
             <button class="btn link" data-action="estado" data-id="${r.id_reserva}">GUARDAR ESTADO</button>
@@ -1190,7 +1194,7 @@ const reportesUI = (() => {
 
 function setTodayDefaults() {
   const today = new Date().toISOString().split('T')[0];
-  ['#res-fecha', '#disp-fecha', '#reservas-filtro-fecha'].forEach((sel) => {
+  ['#res-fecha', '#disp-fecha'].forEach((sel) => {
     const el = qs(sel);
     if (el && !el.value) el.value = today;
   });
@@ -1230,12 +1234,12 @@ function updateSessionUI() {
       const u = sessionManager.currentUser;
       const role = document.createElement('span');
       role.className = 'badge role';
-      role.textContent = u.tipo_participante;
+      role.textContent = (u.tipo_participante || '').toString().toUpperCase();
       tags.appendChild(role);
       if (isAdmin) {
         const admin = document.createElement('span');
         admin.className = 'badge role admin';
-        admin.textContent = 'admin';
+        admin.textContent = 'ADMIN';
         tags.appendChild(admin);
       }
     }
