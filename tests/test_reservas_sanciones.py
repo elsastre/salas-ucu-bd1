@@ -71,7 +71,7 @@ def test_asistencia_sin_presentes_crea_sancion(monkeypatch):
 
     resp = app_module.registrar_asistencia(1, app_module.AsistenciaIn(presentes=[], sancionar_ausentes=True))
 
-    assert resp["estado"] == "sin_asistencia"
+    assert resp["reserva"]["estado"] == "sin_asistencia"
     assert calls["reserva"] == 1
     assert calls["presentes"] == set()
 
@@ -125,7 +125,7 @@ def test_cambio_estado_a_sin_asistencia_sanciona(monkeypatch):
 
     resp = app_module.update_reserva_estado(5, app_module.ReservaEstadoIn(estado="sin_asistencia"))
 
-    assert resp["estado"] == "sin_asistencia"
+    assert resp["reserva"]["estado"] == "sin_asistencia"
     assert calls["reserva"] == 5
 
 

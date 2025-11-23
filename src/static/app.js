@@ -608,13 +608,24 @@ const reservasUI = (() => {
   }
 
   function estadoBadge(estado) {
+    const normalized = (estado || '').toString().toLowerCase();
+    const label = (estado || '').toString().toUpperCase();
     const tone = {
       activa: 'success',
       finalizada: 'neutral',
       sin_asistencia: 'warn',
       cancelada: 'danger',
-    }[estado] || 'neutral';
-    return `<span class="badge ${tone}">${estado}</span>`;
+    }[normalized] || 'neutral';
+    return `<span class="badge ${tone}">${label}</span>`;
+  }
+
+  function notificarSanciones(resp) {
+    if (Array.isArray(resp?.sanciones_creadas) && resp.sanciones_creadas.length > 0) {
+      const msg = resp.sanciones_creadas
+        .map((s) => `CI ${s.ci}, sanción del ${s.fecha_inicio} al ${s.fecha_fin}`)
+        .join('\n');
+      showToast(`Sanción aplicada:\n${msg}`, 'warning');
+    }
   }
 
   async function list() {
@@ -653,18 +664,18 @@ const reservasUI = (() => {
     tbody.innerHTML = '';
     items.forEach((r) => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
-      const salaLabel = `${r.edificio} · ${r.nombre_sala}`;
       const horaLabel = turnoLabel(r.id_turno);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${salaLabel}</td>
-        <td>${participantes.join(', ') || '—'}</td>
+        <td class="numeric">${r.id_reserva}</td>
+        <td>${r.edificio}</td>
+        <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
         <td>${horaLabel}</td>
         <td>${estadoBadge(r.estado)}</td>
+        <td class="wrap">${participantes.join(', ') || '—'}</td>
         <td>
-          <div class="table-actions">
-            <small class="muted">#${r.id_reserva}</small>
+          <div class="table-actions tight">
             <select data-reserva="${r.id_reserva}" class="estado-select">
               ${ALLOWED_ESTADOS
                 .map((e) => {
@@ -722,7 +733,8 @@ const reservasUI = (() => {
     const select = btn.closest('tr').querySelector('.estado-select');
     const estado = select.value;
     try {
-      await apiRequest('PATCH', `${apiBase}/reservas/${id}`, { estado }, qs('#reservas-msg'));
+      const resp = await apiRequest('PATCH', `${apiBase}/reservas/${id}`, { estado }, qs('#reservas-msg'));
+      notificarSanciones(resp);
       await list();
     } catch (_) {}
   }
@@ -740,13 +752,14 @@ const reservasUI = (() => {
     const presentes = validateCiList(qs('#asis-presentes').value, msg) || [];
     if (!id) return;
     try {
-      await apiRequest(
+      const resp = await apiRequest(
         'POST',
         `${apiBase}/reservas/${id}/asistencia`,
         { presentes, sancionar_ausentes: qs('#asis-sancionar').checked },
         msg,
       );
       setAlert(msg, 'Asistencia registrada', 'success');
+      notificarSanciones(resp);
       await list();
     } catch (_) {}
   }

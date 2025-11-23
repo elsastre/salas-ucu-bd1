@@ -235,12 +235,27 @@ table {
   min-width: 420px;
 }
 
+.reservas-table {
+  table-layout: fixed;
+  min-width: 720px;
+}
+
 th,
 td {
   padding: 0.65rem 0.75rem;
   border-bottom: 1px solid #e2e8f0;
   text-align: left;
   font-size: 0.95rem;
+}
+
+.reservas-table th,
+.reservas-table td {
+  padding: 0.25rem 0.5rem;
+}
+
+.reservas-table td.wrap {
+  white-space: normal;
+  word-break: break-word;
 }
 
 th {
@@ -442,6 +457,11 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.table-actions.tight {
+  gap: 0.25rem;
+  align-items: center;
 }
 
 .badge {

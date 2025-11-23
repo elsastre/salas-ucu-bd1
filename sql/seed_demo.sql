@@ -338,7 +338,7 @@ INSERT INTO sala (nombre_sala, edificio, capacidad, tipo_sala) VALUES
   ('Sala E-019', 'Campus Oeste', 14, 'posgrado'),
   ('Sala E-020', 'Campus Oeste', 16, 'libre');
 
--- Turnos (10 horarios)
+-- Turnos (bloques de 1h de 08:00 a 23:00)
 INSERT INTO turno (id_turno, hora_inicio, hora_fin) VALUES
   (1, '08:00:00', '09:00:00'),
   (2, '09:00:00', '10:00:00'),
@@ -349,7 +349,12 @@ INSERT INTO turno (id_turno, hora_inicio, hora_fin) VALUES
   (7, '14:00:00', '15:00:00'),
   (8, '15:00:00', '16:00:00'),
   (9, '16:00:00', '17:00:00'),
-  (10, '17:00:00', '18:00:00');
+  (10, '17:00:00', '18:00:00'),
+  (11, '18:00:00', '19:00:00'),
+  (12, '19:00:00', '20:00:00'),
+  (13, '20:00:00', '21:00:00'),
+  (14, '21:00:00', '22:00:00'),
+  (15, '22:00:00', '23:00:00');
 
 -- Reservas (~100)
 INSERT INTO reserva (id_reserva, nombre_sala, edificio, fecha, id_turno, estado) VALUES
@@ -371,13 +376,13 @@ INSERT INTO reserva (id_reserva, nombre_sala, edificio, fecha, id_turno, estado)
   (16, 'Sala C-009', 'Campus Norte', '2025-11-19', 7, 'activa'),
   (17, 'Sala C-012', 'Campus Norte', '2025-11-20', 8, 'finalizada'),
   (18, 'Sala C-015', 'Campus Norte', '2025-11-21', 9, 'cancelada'),
-  (19, 'Sala C-018', 'Campus Norte', '2025-11-22', 10, 'sin_asistencia'),
+  (19, 'Sala C-018', 'Campus Norte', '2025-11-22', 11, 'sin_asistencia'),
   (20, 'Sala D-001', 'Campus Este', '2025-11-23', 1, 'activa'),
   (21, 'Sala D-004', 'Campus Este', '2025-11-24', 2, 'finalizada'),
   (22, 'Sala D-007', 'Campus Este', '2025-11-25', 3, 'cancelada'),
   (23, 'Sala D-010', 'Campus Este', '2025-11-26', 4, 'sin_asistencia'),
   (24, 'Sala D-013', 'Campus Este', '2025-11-27', 5, 'activa'),
-  (25, 'Sala D-016', 'Campus Este', '2025-11-28', 6, 'finalizada'),
+  (25, 'Sala D-016', 'Campus Este', '2025-11-28', 12, 'finalizada'),
   (26, 'Sala D-019', 'Campus Este', '2025-11-29', 7, 'cancelada'),
   (27, 'Sala E-002', 'Campus Oeste', '2025-11-30', 8, 'sin_asistencia'),
   (28, 'Sala E-005', 'Campus Oeste', '2025-12-01', 9, 'activa'),
@@ -385,19 +390,19 @@ INSERT INTO reserva (id_reserva, nombre_sala, edificio, fecha, id_turno, estado)
   (30, 'Sala E-011', 'Campus Oeste', '2025-12-03', 1, 'cancelada'),
   (31, 'Sala E-014', 'Campus Oeste', '2025-12-04', 2, 'sin_asistencia'),
   (32, 'Sala E-017', 'Campus Oeste', '2025-12-05', 3, 'activa'),
-  (33, 'Sala E-020', 'Campus Oeste', '2025-12-06', 4, 'finalizada'),
+  (33, 'Sala E-020', 'Campus Oeste', '2025-12-06', 13, 'finalizada'),
   (34, 'Sala A-003', 'Sede Central', '2025-12-07', 5, 'cancelada'),
   (35, 'Sala A-006', 'Sede Central', '2025-12-08', 6, 'sin_asistencia'),
   (36, 'Sala A-009', 'Sede Central', '2025-12-09', 7, 'activa'),
   (37, 'Sala A-012', 'Sede Central', '2025-12-10', 8, 'finalizada'),
   (38, 'Sala A-015', 'Sede Central', '2025-12-11', 9, 'cancelada'),
-  (39, 'Sala A-018', 'Sede Central', '2025-12-12', 10, 'sin_asistencia'),
+  (39, 'Sala A-018', 'Sede Central', '2025-12-12', 14, 'sin_asistencia'),
   (40, 'Sala B-001', 'Campus Pocitos', '2025-11-03', 1, 'activa'),
   (41, 'Sala B-004', 'Campus Pocitos', '2025-11-04', 2, 'finalizada'),
   (42, 'Sala B-007', 'Campus Pocitos', '2025-11-05', 3, 'cancelada'),
   (43, 'Sala B-010', 'Campus Pocitos', '2025-11-06', 4, 'sin_asistencia'),
   (44, 'Sala B-013', 'Campus Pocitos', '2025-11-07', 5, 'activa'),
-  (45, 'Sala B-016', 'Campus Pocitos', '2025-11-08', 6, 'finalizada'),
+  (45, 'Sala B-016', 'Campus Pocitos', '2025-11-08', 15, 'finalizada'),
   (46, 'Sala B-019', 'Campus Pocitos', '2025-11-09', 7, 'cancelada'),
   (47, 'Sala C-002', 'Campus Norte', '2025-11-10', 8, 'sin_asistencia'),
   (48, 'Sala C-005', 'Campus Norte', '2025-11-11', 9, 'activa'),
