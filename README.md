@@ -2,6 +2,28 @@
 
 Avance v0.3: FastAPI + MySQL (sin ORM), scripts de base de datos y smoke tests.
 
+## Ejecución rápida
+
+Clona el repo y ejecuta el script de arranque (Windows):
+
+```powershell
+git clone https://github.com/elsastre/salas-ucu-bd1.git
+cd salas-ucu-bd1
+run.bat --reset-db
+```
+
+El script verifica que Docker esté disponible, recrea los volúmenes (aplica siempre `seed_demo.sql` sobre una BD limpia) y corre `docker compose up -d --build`.
+
+URLs por defecto (se respetan las variables `API_PORT` y `DB_PORT` de tu `.env` si existen):
+- UI: http://localhost:%API_PORT%/ui
+- Docs: http://localhost:%API_PORT%/docs
+- Adminer: http://localhost:8080
+
+Para relanzar sin recrear la BD demo usa:
+```powershell
+run.bat
+```
+
 ## Cómo correr (local)
 ```powershell
 # 1) Crear y activar venv
@@ -40,15 +62,16 @@ docker compose up -d --build
 También puedes usar el helper `scripts/reset_demo.sh` para automatizar estos pasos.
 
 ### Windows (un solo paso)
-Ejecuta `run.bat` en la raíz del repo:
+Ejecuta `run.bat` en la raíz del repo (opcionalmente con `--reset-db` para recrear los volúmenes y aplicar el seed demo):
 ```
-run.bat
+run.bat --reset-db
 ```
-El script valida que Docker esté disponible, levanta `db`, `adminer` y `api`, espera el `/health` y abre automáticamente `/docs` y `/ui`.
+El script valida que Docker esté disponible, levanta `db`, `adminer` y `api`, espera el `/health`, recrea la base cuando se pide y abre automáticamente `/docs` y `/ui`.
+Las variables `API_PORT` y `DB_PORT` pueden declararse en `.env` para personalizar puertos expuestos.
 
 ## Seed de demostración
 
-- El volumen `./sql` solo ejecuta `00_schema.sql` y `seed_demo.sql`, que pobló ~100 participantes, ~100 salas repartidas en 5 edificios, 10 turnos, ~100 reservas con estados variados y un set de sanciones activas/expiradas.
+- El volumen `./sql` solo ejecuta `00_schema.sql` y `seed_demo.sql`, que pobló ~100 participantes, ~100 salas repartidas en 5 edificios, 15 turnos de 08:00 a 23:00, ~100 reservas con estados variados y un set de sanciones activas/expiradas.
 - Los archivos `seed.sql` y `seed2.sql` se dejaron vacíos para evitar cargas duplicadas.
 
 ## Scripts de profesor (alternativa)

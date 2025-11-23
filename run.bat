@@ -1,6 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set RESET_DB=0
+if /I "%1"=="--reset-db" (
+    set RESET_DB=1
+    shift
+)
+
 set MODE=%1
 if "%MODE%"=="" set MODE=run
 
@@ -9,6 +15,11 @@ where docker >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Docker no esta en el PATH. Instala/abre Docker Desktop.
     exit /b 1
+)
+
+if %RESET_DB%==1 (
+    echo Aplicando seed_demo.sql (BD limpia)...
+    docker compose down --volumes
 )
 
 echo Construyendo y levantando contenedores...
@@ -39,7 +50,12 @@ echo [ERROR] Modo desconocido: %MODE%
 exit /b 1
 
 :ui
-echo API lista. Abriendo navegador...
+echo API lista. URLs disponibles:
+echo    UI:   %BASE_URL%/ui
+echo    Docs: %BASE_URL%/docs
+echo    Adminer: http://localhost:8080
+echo.
+echo Abriendo navegador...
 start "" %BASE_URL%/docs
 start "" %BASE_URL%/ui
 echo Listo. Usa docker compose logs para ver los registros.

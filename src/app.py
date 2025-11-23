@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from datetime import timedelta, date
+from datetime import timedelta, date, time
 from pathlib import Path as FilePath
 from typing import Any, List, Literal
 
@@ -37,7 +37,6 @@ def get_reservas_connection():
     return get_conn()
 
 # --------- helpers ---------
-from datetime import time, timedelta
 
 CI_CLEAN_RE = re.compile(r"\D")
 
@@ -177,6 +176,41 @@ def _parse_hms(hms: str) -> int:
         return h*3600 + m*60 + s
     except Exception:
         raise HTTPException(status_code=422, detail="Formato de hora inválido. Use 'HH:MM:SS'.")
+
+
+def _validar_reglas_turno(hora_inicio: str, hora_fin: str) -> tuple[int, int]:
+    ini = _parse_hms(hora_inicio)
+    fin = _parse_hms(hora_fin)
+    if ini < 8 * 3600:
+        raise HTTPException(status_code=422, detail="hora_inicio debe ser >= 08:00")
+    if fin > 23 * 3600:
+        raise HTTPException(status_code=422, detail="hora_fin debe ser <= 23:00")
+    if fin <= ini:
+        raise HTTPException(status_code=422, detail="hora_fin debe ser mayor a hora_inicio")
+    if (fin - ini) != 3600:
+        raise HTTPException(status_code=422, detail="Los turnos deben ser bloques de 1 hora exacta")
+    return ini, fin
+
+
+def _validar_solapamiento_turno(conn, hora_inicio: str, hora_fin: str, excluir_id: int | None = None):
+    cur = conn.cursor(dictionary=True)
+    try:
+        sql = "SELECT id_turno, hora_inicio, hora_fin FROM turno WHERE hora_inicio < %s AND hora_fin > %s"
+        params: list[Any] = [hora_fin, hora_inicio]
+        if excluir_id is not None:
+            sql += " AND id_turno <> %s"
+            params.append(excluir_id)
+        cur.execute(sql, tuple(params))
+        solapa = cur.fetchone()
+        if solapa:
+            inicio = _fmt_time(solapa["hora_inicio"])
+            fin = _fmt_time(solapa["hora_fin"])
+            raise HTTPException(
+                status_code=409,
+                detail=f"Turno solapa con ID {solapa['id_turno']} ({inicio} - {fin})",
+            )
+    finally:
+        cur.close()
 
 def _row_to_turno(r):
     return {
@@ -480,16 +514,16 @@ def obtener_turno(id_turno: int = Path(..., ge=0)):
 
 @app.post("/turnos", response_model=TurnoOut, status_code=201)
 def crear_turno(t: TurnoIn):
-    ini = _parse_hms(t.hora_inicio)
-    fin = _parse_hms(t.hora_fin)
-    if fin <= ini:
-        raise HTTPException(status_code=422, detail="hora_fin debe ser mayor a hora_inicio")
+    _validar_reglas_turno(t.hora_inicio, t.hora_fin)
 
     try:
         conn = get_conn()
+        _validar_solapamiento_turno(conn, t.hora_inicio, t.hora_fin)
         cur = conn.cursor()
-        cur.execute("INSERT INTO turno(id_turno, hora_inicio, hora_fin) VALUES (%s,%s,%s);",
-                    (t.id_turno, t.hora_inicio, t.hora_fin))
+        cur.execute(
+            "INSERT INTO turno(id_turno, hora_inicio, hora_fin) VALUES (%s,%s,%s);",
+            (t.id_turno, t.hora_inicio, t.hora_fin),
+        )
         # devolver registro
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id_turno, hora_inicio, hora_fin FROM turno WHERE id_turno=%s;", (t.id_turno,))
@@ -505,16 +539,16 @@ def crear_turno(t: TurnoIn):
 
 @app.put("/turnos/{id_turno}", response_model=TurnoOut)
 def actualizar_turno(id_turno: int, t: TurnoUpdate):
-    ini = _parse_hms(t.hora_inicio)
-    fin = _parse_hms(t.hora_fin)
-    if fin <= ini:
-        raise HTTPException(status_code=422, detail="hora_fin debe ser mayor a hora_inicio")
+    _validar_reglas_turno(t.hora_inicio, t.hora_fin)
 
     try:
         conn = get_conn()
+        _validar_solapamiento_turno(conn, t.hora_inicio, t.hora_fin, excluir_id=id_turno)
         cur = conn.cursor()
-        cur.execute("UPDATE turno SET hora_inicio=%s, hora_fin=%s WHERE id_turno=%s;",
-                    (t.hora_inicio, t.hora_fin, id_turno))
+        cur.execute(
+            "UPDATE turno SET hora_inicio=%s, hora_fin=%s WHERE id_turno=%s;",
+            (t.hora_inicio, t.hora_fin, id_turno),
+        )
         if cur.rowcount == 0:
             cur.close(); conn.close()
             raise HTTPException(status_code=404, detail="Turno no encontrado")
@@ -551,6 +585,17 @@ class ReservaOut(BaseModel):
     id_turno: int
     estado: str
     participantes: str | None = None
+
+
+class SancionResumen(BaseModel):
+    ci: str
+    fecha_inicio: date
+    fecha_fin: date
+
+
+class ReservaConSanciones(BaseModel):
+    reserva: ReservaOut
+    sanciones_creadas: List[SancionResumen] = []
 
 @app.get("/reservas", response_model=List[ReservaOut])
 def list_reservas(
@@ -1219,12 +1264,13 @@ def crear_sanciones_por_ausencia(
     conn: mysql.connector.MySQLConnection,
     id_reserva: int,
     presentes: set[str] | None = None,
-) -> int:
+) -> list[dict[str, Any]]:
     """Crea sanciones de 2 meses para los participantes ausentes de la reserva.
 
     - Usa la fecha de la propia reserva como inicio de la sanción.
     - Evita sancionar a participantes declarados como presentes.
     - Inserta con INSERT IGNORE para no duplicar sanciones idénticas.
+    Devuelve el detalle de sanciones creadas.
     """
 
     cur = conn.cursor(dictionary=True)
@@ -1247,23 +1293,49 @@ def crear_sanciones_por_ausencia(
 
         fecha_reserva = rows[0]["fecha"]
         presentes_set = set(presentes or [])
-        ausentes = [row["ci_participante"] for row in rows if row["ci_participante"] not in presentes_set]
+        ausentes = sorted({row["ci_participante"] for row in rows if row["ci_participante"] not in presentes_set})
 
         if not ausentes:
-            return 0
+            return []
+
+        placeholders = ",".join(["%s"] * len(ausentes))
+        cur.execute(
+            f"""
+            SELECT ci_participante
+            FROM sancion_participante
+            WHERE fecha_inicio = %s AND ci_participante IN ({placeholders})
+            """,
+            tuple([fecha_reserva] + ausentes),
+        )
+        existentes = {row["ci_participante"] for row in cur.fetchall()}
+        a_insertar = [ci for ci in ausentes if ci not in existentes]
+
+        if not a_insertar:
+            return []
 
         cur.executemany(
             """
             INSERT IGNORE INTO sancion_participante (ci_participante, fecha_inicio, fecha_fin)
             VALUES (%s, %s, DATE_ADD(%s, INTERVAL 2 MONTH))
             """,
-            [(ci, fecha_reserva, fecha_reserva) for ci in ausentes],
+            [(ci, fecha_reserva, fecha_reserva) for ci in a_insertar],
         )
-        return cur.rowcount
+
+        placeholders_out = ",".join(["%s"] * len(a_insertar))
+        cur.execute(
+            f"""
+            SELECT ci_participante AS ci, fecha_inicio, fecha_fin
+            FROM sancion_participante
+            WHERE fecha_inicio = %s AND ci_participante IN ({placeholders_out})
+            ORDER BY ci_participante
+            """,
+            tuple([fecha_reserva] + a_insertar),
+        )
+        return cur.fetchall()
     finally:
         cur.close()
 
-@app.patch("/reservas/{id_reserva}", response_model=ReservaOut)
+@app.patch("/reservas/{id_reserva}", response_model=ReservaConSanciones)
 def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
     """
     Cambia el estado de una reserva existente.
@@ -1308,14 +1380,15 @@ def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
             (estado, id_reserva),
         )
 
+        sanciones: list[dict[str, Any]] = []
         if estado == "sin_asistencia" and row.get("estado") != "sin_asistencia":
-            crear_sanciones_por_ausencia(conn, id_reserva)
+            sanciones = crear_sanciones_por_ausencia(conn, id_reserva)
 
         conn.commit()
 
         # 3) Devolver la reserva actualizada
         row["estado"] = estado
-        return row
+        return {"reserva": row, "sanciones_creadas": sanciones}
 
     except HTTPException:
         raise
@@ -1324,7 +1397,7 @@ def update_reserva_estado(id_reserva: int, payload: ReservaEstadoIn):
     finally:
         conn.close()
 
-@app.post("/reservas/{id_reserva}/asistencia", response_model=ReservaOut)
+@app.post("/reservas/{id_reserva}/asistencia", response_model=ReservaConSanciones)
 def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
     """
     Registra la asistencia de los participantes de una reserva.
@@ -1417,8 +1490,9 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
         )
 
         # 6) Sancionar ausentes según configuración (2 meses)
+        sanciones_creadas: list[dict[str, Any]] = []
         if payload.sancionar_ausentes:
-            crear_sanciones_por_ausencia(conn, id_reserva, presentes)
+            sanciones_creadas = crear_sanciones_por_ausencia(conn, id_reserva, presentes)
 
         conn.commit()
 
@@ -1439,7 +1513,7 @@ def registrar_asistencia(id_reserva: int, payload: AsistenciaIn):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=500, detail="No se pudo recuperar la reserva actualizada.")
-        return row
+        return {"reserva": row, "sanciones_creadas": sanciones_creadas}
     except mysql.connector.Error as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error registrando asistencia: {e}")

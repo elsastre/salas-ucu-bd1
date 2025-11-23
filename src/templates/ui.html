@@ -89,7 +89,7 @@
                     <p class="muted">Incluye tipo de sala y capacidad. Puedes editar o eliminar cada registro.</p>
                 </div>
                     <div class="table-wrapper">
-                        <table>
+                        <table class="reservas-table">
                             <thead>
                                 <tr><th>Edificio</th><th>Sala</th><th>Capacidad</th><th>Tipo</th><th>Acciones</th></tr>
                             </thead>
@@ -200,7 +200,7 @@
                 <div>
                     <p class="eyebrow">Turnos</p>
                     <h2>ABM de turnos horarios</h2>
-                    <p class="help">Bloques de 1 hora entre 08:00 y 23:00. Validación simple de inicio < fin.</p>
+                    <p class="help">Bloques de 1 hora entre 08:00 y 23:00, sin solapamientos.</p>
                 </div>
                 <button class="btn secondary" id="turnos-refresh">Actualizar</button>
             </div>
@@ -277,7 +277,16 @@
                     <div class="table-wrapper">
                         <table>
                             <thead>
-                                <tr><th>Sala</th><th>CI</th><th>Fecha</th><th>Hora</th><th>Estado</th><th>Acciones</th></tr>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Campus / Edificio</th>
+                                    <th>Sala</th>
+                                    <th>Fecha</th>
+                                    <th>Turno</th>
+                                    <th>Estado</th>
+                                    <th>Participantes</th>
+                                    <th>ACCIONES</th>
+                                </tr>
                             </thead>
                             <tbody id="reservas-table"></tbody>
                         </table>
