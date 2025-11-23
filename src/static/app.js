@@ -219,7 +219,7 @@ const navigation = (() => {
     );
   }
 
-  return { init };
+  return { init, show };
 })();
 
 const combos = {
