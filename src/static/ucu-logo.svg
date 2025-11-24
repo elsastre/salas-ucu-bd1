@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" role="img" aria-labelledby="title desc">
+  <title id="title">Logo Universidad Católica del Uruguay</title>
+  <desc id="desc">Escudo azul con cruz y olas a la izquierda y texto Universidad Católica del Uruguay a la derecha.</desc>
+  <defs>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c3a78" />
+      <stop offset="100%" stop-color="#0b2e62" />
+    </linearGradient>
+  </defs>
+  <g>
+    <path d="M30 12c-3 0-5.4 2.4-5.4 5.4v41.2c0 22.6 16 40.5 35.4 49.4 19.4-8.9 35.4-26.8 35.4-49.4V17.4c0-3-2.4-5.4-5.4-5.4H30Z" fill="url(#shieldGradient)" />
+    <path d="M60 30.8H46.3v-7H38v7H24.4v7.7H38v18.5h8.3V38.5H60v-7.7Z" fill="#f7fbff" />
+    <path d="M60 58.7c-9.3 0-17.6 2.6-24.7 7.3 6.2 10 14.5 17.5 24.7 22.5 10.1-5 18.4-12.5 24.6-22.5-7-4.7-15.3-7.3-24.6-7.3Z" fill="#f7fbff" />
+  </g>
+  <g fill="#0c2f63" font-family="'Inter','Segoe UI',Arial,sans-serif">
+    <text x="110" y="56" font-size="54" font-weight="800" letter-spacing="0.5">UCU</text>
+    <text x="110" y="82" font-size="20" font-weight="700">Universidad Católica del Uruguay</text>
+  </g>
+</svg>
