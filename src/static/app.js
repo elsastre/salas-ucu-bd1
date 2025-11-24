@@ -637,7 +637,7 @@ const reservasUI = (() => {
     try {
       requireLogin(msg);
     } catch (_) {
-      tablePlaceholder(qs('#reservas-table-body'), 'Inicia sesión para ver reservas');
+      tablePlaceholder(qs('#reservas-table'), 'Inicia sesión para ver reservas');
       const count = qs('#reservas-count');
       if (count) count.textContent = 'Mostrando 0 de 0 reservas.';
       return;
@@ -658,7 +658,7 @@ const reservasUI = (() => {
   }
 
   function render(items, total = 0) {
-    const tbody = qs('#reservas-table-body');
+    const tbody = qs('#reservas-table');
     const count = qs('#reservas-count');
     if (!items.length) {
       tablePlaceholder(tbody, 'Sin reservas');
@@ -677,25 +677,23 @@ const reservasUI = (() => {
       const estado = formatEstado(r.estado);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td class="numeric">${r.id_reserva}</td>
         <td>${r.edificio}</td>
         <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
         <td class="numeric">
           ${r.id_turno}
-          ${horaLabel ? `<div class="muted">${horaLabel}</div>` : ''}
+          ${horaLabel ? `<div class=\"muted\">${horaLabel}</div>` : ''}
         </td>
         <td>${estadoBadge(estado)}</td>
         <td class="wrap">${participantes.length ? participantes.join(', ') : '—'}</td>
         <td>
           <div class="table-actions tight">
+            <span class="muted">#${r.id_reserva}</span><br>
             <select data-reserva="${r.id_reserva}" class="estado-select">
-              ${ALLOWED_ESTADOS
-                .map((e) => {
-                  const label = formatEstado(e);
-                  return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
-                })
-                .join('')}
+              ${ALLOWED_ESTADOS.map((e) => {
+                const label = (e || '').toString().toUpperCase();
+                return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
+              }).join('')}
             </select>
             <button class="btn link" data-action="estado" data-id="${r.id_reserva}">GUARDAR ESTADO</button>
           </div>
@@ -787,7 +785,7 @@ const reservasUI = (() => {
       list();
     });
     qs('#reservas-form').addEventListener('submit', submit);
-    qs('#reservas-table-body').addEventListener('click', updateEstado);
+    qs('#reservas-table').addEventListener('click', updateEstado);
     qs('#asistencia-form').addEventListener('submit', registrarAsistencia);
     qs('#res-edificio').addEventListener('change', (e) => combos.loadSalasFor(e.target.value, qs('#res-sala')));
     qs('#reservar-como-yo').addEventListener('click', () => {
