@@ -1,22 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 140" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120" role="img" aria-labelledby="title desc">
   <title id="title">Logo Universidad Católica del Uruguay</title>
-  <desc id="desc">Escudo azul con cruz y olas a la izquierda y texto Universidad Católica del Uruguay a la derecha.</desc>
+  <desc id="desc">Logotipo azul con cruz, mar y texto UCU</desc>
   <defs>
     <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#0e3c7e" />
-      <stop offset="100%" stop-color="#0b2f63" />
+      <stop offset="0%" stop-color="#0a2f6a" />
+      <stop offset="100%" stop-color="#0c4a8a" />
     </linearGradient>
   </defs>
-  <g>
-    <path d="M34 12c-6.2 0-11.2 5-11.2 11.2v52C22.8 105.2 44.8 127 70 137c25.2-10 47.2-31.8 47.2-61.8v-52C117.2 17 112.2 12 106 12H34Z" fill="url(#shieldGradient)" />
-    <path d="M70 32.5H52.8v-8.3h-8.6v8.3H27v9.2h17.2v22.1h8.6V41.7H70v-9.2Z" fill="#f7fbff" />
-    <path d="M70 65.7c-11.2 0-21.2 3.2-29.7 9.1 7.6 12.3 17.6 21.3 29.7 27.2 12-5.9 22.1-14.9 29.6-27.2-8.4-5.9-18.4-9.1-29.6-9.1Z" fill="#f7fbff" />
-    <path d="M40 70.5c9-4.9 19.2-7.4 30-7.4s21 2.5 30 7.4" fill="none" stroke="#dcebff" stroke-width="2.2" stroke-linecap="round" />
-    <path d="M43 78.2c8.2-4 17.8-6 27.9-6s19.7 2 27.9 6" fill="none" stroke="#dcebff" stroke-width="2.2" stroke-linecap="round" />
-    <path d="M46.5 86c7-3.2 15.2-4.8 24.4-4.8s17.4 1.6 24.4 4.8" fill="none" stroke="#dcebff" stroke-width="2.2" stroke-linecap="round" />
+  <g fill="#0a2f6a">
+    <path d="M48 10c-13.8 0-25 11.2-25 25v26c0 18.5 11 34.4 25 43.6 14-9.2 25-25 25-43.6V35C73 21.2 61.8 10 48 10Z" fill="url(#shieldGradient)"/>
+    <path d="M48 20c-8.3 0-15 6.7-15 15v19.5c4.4-2.1 9.4-3.3 15-3.3s10.6 1.2 15 3.3V35c0-8.3-6.7-15-15-15Zm-1.6 6.2h3.3v6.7H56v3.3h-6.3V43h-3.3v-6.8H40v-3.3h6.4v-6.7Z" fill="#f6fbff"/>
+    <path d="M48 68.4c-6.2 0-12.1 1.8-17 5 4.3 8.1 10.7 14.7 17 18.7 6.3-4 12.7-10.6 17-18.7-4.9-3.2-10.8-5-17-5Z" fill="#f6fbff"/>
   </g>
-  <g fill="#0c2f63" font-family="'Inter','Segoe UI',Arial,sans-serif" letter-spacing="0.3">
-    <text x="140" y="63" font-size="58" font-weight="800">UCU</text>
-    <text x="140" y="90" font-size="22" font-weight="700">Universidad Católica del Uruguay</text>
+  <g fill="#0a2f6a" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-weight="700">
+    <text font-size="58" x="95" y="70">UCU</text>
+    <text font-size="20" x="205" y="48">Universidad</text>
+    <text font-size="20" x="205" y="73">Católica del</text>
+    <text font-size="20" x="205" y="98">Uruguay</text>
   </g>
 </svg>
