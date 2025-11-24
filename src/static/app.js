@@ -669,9 +669,10 @@ const reservasUI = (() => {
     items.forEach((r) => {
       const participantes = Array.isArray(r.participantes)
         ? r.participantes
-        : r.participantes
-        ? String(r.participantes).split(',')
-        : [];
+        : (r.participantes || '')
+            .split(',')
+            .map((p) => p.trim())
+            .filter(Boolean);
       const horaLabel = r.hora_label || turnoLabel(r.id_turno) || '';
       const estado = formatEstado(r.estado);
       const tr = document.createElement('tr');
@@ -680,15 +681,18 @@ const reservasUI = (() => {
         <td>${r.edificio}</td>
         <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
-        <td class="numeric">${r.id_turno}${horaLabel ? `<div class="muted">${horaLabel}</div>` : ''}</td>
+        <td class="numeric">
+          ${r.id_turno}
+          ${horaLabel ? `<div class="muted">${horaLabel}</div>` : ''}
+        </td>
         <td>${estadoBadge(estado)}</td>
-        <td class="wrap">${participantes.join(', ') || '—'}</td>
+        <td class="wrap">${participantes.length ? participantes.join(', ') : '—'}</td>
         <td>
           <div class="table-actions tight">
             <select data-reserva="${r.id_reserva}" class="estado-select">
               ${ALLOWED_ESTADOS
                 .map((e) => {
-                  const label = (e || '').toString().toUpperCase();
+                  const label = formatEstado(e);
                   return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
                 })
                 .join('')}
