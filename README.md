@@ -9,7 +9,7 @@ Clona el repo y ejecuta el script de arranque (Windows):
 ```powershell
 git clone https://github.com/elsastre/salas-ucu-bd1.git
 cd salas-ucu-bd1
-run.bat --reset-db   # opcional, recrea la BD y aplica el seed demo
+.\run.bat --reset-db   # opcional, recrea la BD y aplica el seed demo
 ```
 
 El script verifica que Docker esté disponible, levanta `docker compose up -d --build`, lee `API_PORT` desde `.env` (o usa 8000) y abre automáticamente las URLs clave:
