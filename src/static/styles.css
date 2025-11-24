@@ -267,7 +267,7 @@ td {
   white-space: normal;
 }
 
-#reservas-table .estado-badge {
+.estado-badge {
   text-transform: uppercase;
 }
 
