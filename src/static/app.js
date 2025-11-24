@@ -680,8 +680,8 @@ const reservasUI = (() => {
         <td>${r.edificio}</td>
         <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
-        <td class="numeric turno-cell">
-          <div>${r.id_turno || ''}</div>
+        <td class="numeric">
+          ${r.id_turno}
           ${horaLabel ? `<div class=\"muted\">${horaLabel}</div>` : ''}
         </td>
         <td class="estado-cell">
@@ -697,15 +697,13 @@ const reservasUI = (() => {
         </td>
         <td class="acciones-cell">
           <div class="table-actions tight">
-            <div class="muted">#${r.id_reserva}</div>
-            <div class="acciones-control">
-              <select data-reserva="${r.id_reserva}" class="estado-select">
-                ${ALLOWED_ESTADOS.map((e) => {
-                  const label = (e || '').toString().toUpperCase();
-                  return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
-                }).join('')}
-              </select>
-            </div>
+            <span class="muted">#${r.id_reserva}</span><br>
+            <select data-reserva="${r.id_reserva}" class="estado-select">
+              ${ALLOWED_ESTADOS.map((e) => {
+                const label = (e || '').toString().toUpperCase();
+                return `<option value="${e}" ${e === r.estado ? 'selected' : ''}>${label}</option>`;
+              }).join('')}
+            </select>
             <button class="btn link" data-action="estado" data-id="${r.id_reserva}">GUARDAR ESTADO</button>
           </div>
         </td>`;
