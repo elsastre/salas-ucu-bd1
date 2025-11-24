@@ -27,7 +27,10 @@ def get_conn():
         user=os.getenv("DB_USER", "root"),
         password=os.getenv("DB_PASS", "root"),
         database=os.getenv("DB_NAME", "salas_db"),
-        autocommit=True
+        autocommit=True,
+        charset="utf8mb4",
+        collation="utf8mb4_unicode_ci",
+        use_unicode=True,
     )
     ensure_schema_migrations(conn)
     return conn

@@ -258,6 +258,19 @@ td {
   word-break: break-word;
 }
 
+#reservas-table th,
+#reservas-table td {
+  padding: 0.25rem 0.5rem;
+}
+
+#reservas-table .wrap {
+  white-space: normal;
+}
+
+#reservas-table .estado-badge {
+  text-transform: uppercase;
+}
+
 .reservas-table td .muted {
   display: block;
   color: #475569;
