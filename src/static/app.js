@@ -14,6 +14,10 @@ const state = {
   turnos: [],
 };
 
+function formatEstado(raw) {
+  return (raw || '').toString().toUpperCase();
+}
+
 function requestSubmit(form) {
   if (!form) return;
   if (typeof form.requestSubmit === 'function') {
@@ -609,7 +613,7 @@ const reservasUI = (() => {
 
   function estadoBadge(estado) {
     const normalized = (estado || '').toString().toLowerCase();
-    const label = (estado || '').toString().toUpperCase();
+    const label = formatEstado(estado);
     const tone = {
       activa: 'success',
       finalizada: 'neutral',
@@ -664,15 +668,15 @@ const reservasUI = (() => {
     tbody.innerHTML = '';
     items.forEach((r) => {
       const participantes = r.participantes ? r.participantes.split(',') : [];
-      const horaLabel = turnoLabel(r.id_turno);
-      const estado = (r.estado || '').toString().toUpperCase();
+      const horaLabel = r.hora_label || turnoLabel(r.id_turno) || '';
+      const estado = formatEstado(r.estado);
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="numeric">${r.id_reserva}</td>
         <td>${r.edificio}</td>
         <td>${r.nombre_sala}</td>
         <td>${r.fecha}</td>
-        <td class="numeric">${r.id_turno}<div class="muted">${horaLabel}</div></td>
+        <td class="numeric">${r.id_turno}${horaLabel ? `<div class="muted">${horaLabel}</div>` : ''}</td>
         <td>${estadoBadge(estado)}</td>
         <td class="wrap">${participantes.join(', ') || '—'}</td>
         <td>
@@ -821,11 +825,12 @@ const disponibilidadUI = (() => {
     if (!items.length) return tablePlaceholder(tbody, 'Sin turnos para mostrar');
     tbody.innerHTML = '';
     items.forEach((t) => {
+      const estadoReserva = formatEstado(t.estado_reserva);
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${t.id_turno}</td>
         <td>${t.hora_inicio} - ${t.hora_fin}</td>
-        <td>${t.reservado ? `Reservado (${t.estado_reserva || '—'})` : 'Libre'}</td>
+        <td>${t.reservado ? `Reservado (${estadoReserva || '—'})` : 'Libre'}</td>
         <td>${
           t.reservado
             ? ''

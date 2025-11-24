@@ -265,6 +265,24 @@ td {
   margin-top: 2px;
 }
 
+.reservas-admin-table th,
+.reservas-admin-table td {
+  padding: 0.25rem 0.5rem;
+}
+
+.reservas-admin-table .wrap {
+  white-space: normal;
+}
+
+.reservas-admin-table .numeric,
+.reservas-admin-table th:nth-child(1),
+.reservas-admin-table th:nth-child(5),
+.reservas-admin-table th:nth-child(6),
+.reservas-admin-table th:nth-child(8) {
+  width: 1%;
+  white-space: nowrap;
+}
+
 th {
   background: #f8fafc;
   font-weight: 700;
