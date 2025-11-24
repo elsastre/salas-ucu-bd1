@@ -258,15 +258,6 @@ td {
   word-break: break-word;
 }
 
-#reservas-table th,
-#reservas-table td {
-  padding: 0.25rem 0.5rem;
-}
-
-#reservas-table .wrap {
-  white-space: normal;
-}
-
 .estado-badge {
   text-transform: uppercase;
 }
@@ -281,19 +272,43 @@ td {
 .reservas-admin-table th,
 .reservas-admin-table td {
   padding: 0.25rem 0.5rem;
+  vertical-align: top;
 }
 
 .reservas-admin-table .wrap {
   white-space: normal;
 }
 
-.reservas-admin-table .numeric,
-.reservas-admin-table th:nth-child(1),
-.reservas-admin-table th:nth-child(5),
-.reservas-admin-table th:nth-child(6),
-.reservas-admin-table th:nth-child(8) {
-  width: 1%;
-  white-space: nowrap;
+.turno-cell .muted {
+  font-size: 0.75rem;
+}
+
+.participantes-cell {
+  white-space: normal;
+}
+
+.participante-count {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.participantes-list > div {
+  line-height: 1.2;
+}
+
+.acciones-cell .table-actions.tight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.acciones-cell .estado-select {
+  max-width: 100%;
+}
+
+.acciones-cell .muted {
+  font-size: 0.75rem;
 }
 
 th {
