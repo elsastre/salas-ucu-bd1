@@ -5,15 +5,15 @@ REM Uso: run.bat [--reset-db]
 REM Levanta los contenedores y abre las URLs principales.
 
 set RESET_DB=0
-if /I "%1"=="--reset-db" (
+if /I "%~1"=="--reset-db" (
     set RESET_DB=1
 )
 
 REM Leer API_PORT desde .env si existe
 set API_PORT=
 if exist .env (
-    for /f "usebackq tokens=1,2 delims==" %%A in (`findstr /B "API_PORT=" .env`) do (
-        set "API_PORT=%%B"
+    for /f "usebackq tokens=1,* delims==" %%A in (`findstr /B "API_PORT=" .env`) do (
+        if /I "%%A"=="API_PORT" set "API_PORT=%%B"
     )
 )
 if "!API_PORT!"=="" set "API_PORT=8000"

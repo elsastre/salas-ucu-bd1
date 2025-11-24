@@ -620,7 +620,7 @@ const reservasUI = (() => {
       sin_asistencia: 'warn',
       cancelada: 'danger',
     }[normalized] || 'neutral';
-    return `<span class="badge ${tone}">${label}</span>`;
+    return `<span class="badge estado-badge ${tone}">${label}</span>`;
   }
 
   function notificarSanciones(resp) {
@@ -637,7 +637,7 @@ const reservasUI = (() => {
     try {
       requireLogin(msg);
     } catch (_) {
-      tablePlaceholder(qs('#reservas-table'), 'Inicia sesión para ver reservas');
+      tablePlaceholder(qs('#reservas-table-body'), 'Inicia sesión para ver reservas');
       const count = qs('#reservas-count');
       if (count) count.textContent = 'Mostrando 0 de 0 reservas.';
       return;
@@ -658,7 +658,7 @@ const reservasUI = (() => {
   }
 
   function render(items, total = 0) {
-    const tbody = qs('#reservas-table');
+    const tbody = qs('#reservas-table-body');
     const count = qs('#reservas-count');
     if (!items.length) {
       tablePlaceholder(tbody, 'Sin reservas');
@@ -667,7 +667,11 @@ const reservasUI = (() => {
     }
     tbody.innerHTML = '';
     items.forEach((r) => {
-      const participantes = r.participantes ? r.participantes.split(',') : [];
+      const participantes = Array.isArray(r.participantes)
+        ? r.participantes
+        : r.participantes
+        ? String(r.participantes).split(',')
+        : [];
       const horaLabel = r.hora_label || turnoLabel(r.id_turno) || '';
       const estado = formatEstado(r.estado);
       const tr = document.createElement('tr');
@@ -779,7 +783,7 @@ const reservasUI = (() => {
       list();
     });
     qs('#reservas-form').addEventListener('submit', submit);
-    qs('#reservas-table').addEventListener('click', updateEstado);
+    qs('#reservas-table-body').addEventListener('click', updateEstado);
     qs('#asistencia-form').addEventListener('submit', registrarAsistencia);
     qs('#res-edificio').addEventListener('change', (e) => combos.loadSalasFor(e.target.value, qs('#res-sala')));
     qs('#reservar-como-yo').addEventListener('click', () => {
