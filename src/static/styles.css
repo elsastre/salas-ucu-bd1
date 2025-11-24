@@ -258,15 +258,6 @@ td {
   word-break: break-word;
 }
 
-#reservas-table th,
-#reservas-table td {
-  padding: 0.25rem 0.5rem;
-}
-
-#reservas-table .wrap {
-  white-space: normal;
-}
-
 .estado-badge {
   text-transform: uppercase;
 }
@@ -288,10 +279,9 @@ td {
 }
 
 .reservas-admin-table .numeric,
-.reservas-admin-table th:nth-child(1),
+.reservas-admin-table th:nth-child(4),
 .reservas-admin-table th:nth-child(5),
-.reservas-admin-table th:nth-child(6),
-.reservas-admin-table th:nth-child(8) {
+.reservas-admin-table th:nth-child(7) {
   width: 1%;
   white-space: nowrap;
 }
