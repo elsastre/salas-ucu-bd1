@@ -126,3 +126,27 @@ reportes en `/ui` (cada tarjeta tiene filtros propios):
 
 La UI permite ejecutar cada consulta con filtros de fecha y límites, mostrando tablas interpretables sin requerir headers de auth en
 los endpoints existentes.
+
+### Opción rápida (Windows + PowerShell)
+
+Requisitos previos:
+
+- **Docker Desktop** instalado y abierto (daemon corriendo).
+- **Git** instalado.
+- Usar **PowerShell** en Windows.
+
+Pasos para clonar y levantar todo desde cero:
+
+```powershell
+# 1) Ir al Escritorio y borrar una copia anterior (si existe)
+Set-Location "$env:USERPROFILE\OneDrive\Desktop"
+Remove-Item -Recurse -Force ".\salas-ucu-bd1-nuevo" -ErrorAction SilentlyContinue
+
+# 2) Clonar el repositorio en una carpeta nueva
+git clone https://github.com/elsastre/salas-ucu-bd1.git "salas-ucu-bd1-nuevo"
+Set-Location ".\salas-ucu-bd1-nuevo"
+
+# 3) Levantar contenedores y recrear la base de datos demo
+.\run.bat --reset-db
+
+
