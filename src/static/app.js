@@ -669,7 +669,7 @@ const reservasUI = (() => {
     items.forEach((r) => {
       const participantes = Array.isArray(r.participantes)
         ? r.participantes
-        : (r.participantes || '')
+        : String(r.participantes || '')
             .split(',')
             .map((p) => p.trim())
             .filter(Boolean);
@@ -684,9 +684,18 @@ const reservasUI = (() => {
           ${r.id_turno}
           ${horaLabel ? `<div class=\"muted\">${horaLabel}</div>` : ''}
         </td>
-        <td>${estadoBadge(estado)}</td>
-        <td class="wrap">${participantes.length ? participantes.join(', ') : '—'}</td>
-        <td>
+        <td class="estado-cell">
+          ${estadoBadge(estado)}
+        </td>
+        <td class="participantes-cell">
+          <div class="participante-count">${participantes.length || 0}</div>
+          <div class="participantes-list">
+            ${participantes.length
+              ? participantes.map((ci) => `<div>${ci}</div>`).join('')
+              : '<div class="muted">—</div>'}
+          </div>
+        </td>
+        <td class="acciones-cell">
           <div class="table-actions tight">
             <span class="muted">#${r.id_reserva}</span><br>
             <select data-reserva="${r.id_reserva}" class="estado-select">

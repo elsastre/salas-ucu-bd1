@@ -272,6 +272,7 @@ td {
 .reservas-admin-table th,
 .reservas-admin-table td {
   padding: 0.25rem 0.5rem;
+  vertical-align: top;
 }
 
 .reservas-admin-table .wrap {
